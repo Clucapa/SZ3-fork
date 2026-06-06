@@ -6,6 +6,22 @@ env:
   BUILD_TYPE: Release
 
 jobs:
+  check-non-ascii:
+    name: Check non-ASCII
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check for non-ASCII characters
+        run: |
+          if git grep -P '[^\x00-\x7F]' -- \
+              ':!README.md' \
+              ':!copyright-and-BSD-license.txt'; then
+            echo "::error::Non-ASCII characters found in source files!"
+            exit 1
+          fi
+          echo "No non-ASCII characters found."
+
   build-linux:
     name: Build (Linux)
     runs-on: ubuntu-latest

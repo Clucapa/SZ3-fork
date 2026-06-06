@@ -1,6 +1,9 @@
 SZ3: A Modular Error-bounded Lossy Compression Framework for Scientific Datasets
 =====
-(C) 2016 by Mathematics and Computer Science (MCS), Argonne National Laboratory. See COPYRIGHT in the top-level directory.
+
+This is a fork of the SZ3 repository, created to implement a standalone, modular QPET plugin on top of the latest SZ3 version.
+
+(C) 2016 by Mathematics and Computer Science (MCS), Argonne National Laboratory. See copyright-and-BSD-license.txt in the top-level directory.
 
 * Major Authors: Sheng Di, Kai Zhao, Xin Liang, Jinyang Liu
 * Supervisor: Franck Cappello
