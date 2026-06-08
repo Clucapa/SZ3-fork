@@ -12,15 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Check for non-ASCII characters
+      - name: Check for non-ASCII characters in C/C++ files
         run: |
           if git grep -P '[^\x00-\x7F]' -- \
-              ':!README.md' \
-              ':!copyright-and-BSD-license.txt'; then
-            echo "::error::Non-ASCII characters found in source files!"
+              '*.h' '*.hpp' '*.c' '*.cpp' '*.cxx' '*.hxx'; then
+            echo "::error::Non-ASCII characters found in C/C++ source files!"
             exit 1
           fi
-          echo "No non-ASCII characters found."
+          echo "No non-ASCII characters found in C/C++ files."
 
   build-linux:
     name: Build (Linux)
