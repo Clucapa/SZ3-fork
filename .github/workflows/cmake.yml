@@ -14,12 +14,28 @@ jobs:
 
       - name: Check for non-ASCII characters in C/C++ files
         run: |
-          if git grep -P '[^\x00-\x7F]' -- \
-              '*.h' '*.hpp' '*.c' '*.cpp' '*.cxx' '*.hxx'; then
-            echo "::error::Non-ASCII characters found in C/C++ source files!"
+          EXTENSIONS="*.h *.hpp *.c *.cpp *.cxx *.hxx"
+
+          if git grep -P '[^\x00-\x7F]$' -- $EXTENSIONS; then
+            echo "::error::Line ends with non-ASCII character!"
             exit 1
           fi
-          echo "No non-ASCII characters found in C/C++ files."
+
+          has_error=0
+          while IFS= read -r line; do
+            before_comment="${line%%//*}"
+            if echo "$before_comment" | grep -qP '[^\x00-\x7F]'; then
+              echo "$line"
+              has_error=1
+            fi
+          done < <(git grep -P '[^\x00-\x7F]' -- $EXTENSIONS || true)
+
+          if [ $has_error -eq 1 ]; then
+            echo "::error::Non-ASCII character found before // comment (or in line without //)"
+            exit 1
+          fi
+
+          echo "No disallowed non-ASCII characters found."
 
   build-linux:
     name: Build (Linux)
