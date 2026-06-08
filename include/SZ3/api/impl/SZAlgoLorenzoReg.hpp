@@ -6,12 +6,15 @@
 
 #include "SZ3/compressor/SZGenericCompressor.hpp"
 #include "SZ3/decomposition/BlockwiseDecomposition.hpp"
+#include "SZ3/decomposition/QpetBlockDecomp.hpp"
 #include "SZ3/def.hpp"
 #include "SZ3/lossless/Lossless_zstd.hpp"
 #include "SZ3/predictor/ComposedPredictor.hpp"
 #include "SZ3/predictor/LorenzoPredictor.hpp"
 #include "SZ3/predictor/RegressionPredictor.hpp"
+#include "SZ3/qoi/QoIIf.hpp"
 #include "SZ3/quantizer/LinearQuantizer.hpp"
+#include "SZ3/quantizer/QpetQnt.hpp"
 #include "SZ3/utils/Config.hpp"
 #include "SZ3/utils/Iterator.hpp"
 #include "SZ3/utils/QuantOptimization.hpp"
@@ -69,6 +72,15 @@ size_t SZ_compress_LorenzoReg(Config &conf, T *data, uchar *cmpData, size_t cmpC
     assert(conf.cmprAlgo == ALGO_LORENZO_REG);
     calAbsErrorBound(conf, data);
 
+    auto qoi = GetQOI<T, N>(conf);
+    if (qoi) {
+        auto pred = LorenzoPredictor<T, N, 1>(conf.absErrorBound);
+        auto qnt = QpetQnt<T>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
+        auto decomp = QpetBlockDecomp<T, N, decltype(pred), decltype(qnt)>(conf, pred, qnt, qoi);
+        auto sz = make_compressor_sz_generic<T, N>(decomp, HuffmanEncoder<int>(), Lossless_zstd());
+        return sz->compress(conf, data, cmpData, cmpCap);
+    }
+
     auto quantizer = LinearQuantizer<T>(conf.absErrorBound, conf.quantbinCnt / 2);
     auto sz = make_compressor_lorenzo_regression<T, N>(conf, quantizer, HuffmanEncoder<int>(), Lossless_zstd());
     return sz->compress(conf, data, cmpData, cmpCap);
@@ -78,6 +90,19 @@ template <class T, uint N>
 void SZ_decompress_LorenzoReg(const Config &conf, const uchar *cmpData, size_t cmpSize, T *decData) {
     assert(conf.cmprAlgo == ALGO_LORENZO_REG);
     auto cmpDataPos = cmpData;
+
+    if (conf.qoi >= 0) {
+        auto qoi = GetQOI<T, N>(conf);
+        if (qoi) {
+            auto pred = LorenzoPredictor<T, N, 1>(conf.absErrorBound);
+            auto qnt = QpetQnt<T>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
+            auto decomp = QpetBlockDecomp<T, N, decltype(pred), decltype(qnt)>(conf, pred, qnt, qoi);
+            auto sz = make_compressor_sz_generic<T, N>(decomp, HuffmanEncoder<int>(), Lossless_zstd());
+            sz->decompress(conf, cmpDataPos, cmpSize, decData);
+            return;
+        }
+    }
+
     LinearQuantizer<T> quantizer;
     auto sz = make_compressor_lorenzo_regression<T, N>(conf, quantizer, HuffmanEncoder<int>(), Lossless_zstd());
     sz->decompress(conf, cmpDataPos, cmpSize, decData);

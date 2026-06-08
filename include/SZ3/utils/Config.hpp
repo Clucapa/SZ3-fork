@@ -348,6 +348,12 @@ class Config {
         write(blockSize, c);
         write(predDim, c);
 
+        write(qoi, c);
+        write(qEB, c);
+        write(qEBase, c);
+        write(qELogB, c);
+        write(qR, c);
+
         auto confSize = static_cast<uchar>(c - c0);
         write(confSize, c0);  // write conf size at reserved space
         return confSize;
@@ -409,6 +415,21 @@ class Config {
         }
         if (c < c1) {
             read(predDim, c);
+        }
+        if (c < c1) {
+            read(qoi, c);
+        }
+        if (c < c1) {
+            read(qEB, c);
+        }
+        if (c < c1) {
+            read(qEBase, c);
+        }
+        if (c < c1) {
+            read(qELogB, c);
+        }
+        if (c < c1) {
+            read(qR, c);
         }
     }
 
@@ -476,6 +497,13 @@ class Config {
         -1;  ///< Interpolation anchor stride (-1 for dynamic). Saved/loaded in InterpolationDecomposition.
     double interpAlpha = 1.25;  ///< Interpolation eb tuning parameter. Saved/loaded in InterpolationDecomposition.
     double interpBeta = 2.0;    ///< Interpolation eb tuning parameter. Saved/loaded in InterpolationDecomposition.
+
+    int qoi = 0;
+    double qEB = 1.0;
+    double qEBase = 1e-15;
+    double qELogB = 2;
+    int qR = 128;
+    std::vector<double> ebs;
 };
 
 }  // namespace SZ3

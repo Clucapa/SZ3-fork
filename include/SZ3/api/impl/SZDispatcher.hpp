@@ -5,6 +5,7 @@
 #include "SZ3/api/impl/SZAlgoLorenzoReg.hpp"
 #include "SZ3/api/impl/SZAlgoNopred.hpp"
 #include "SZ3/api/impl/SZAlgoBioMD.hpp"
+#include "SZ3/qoi/QoIIf.hpp"
 #include "SZ3/utils/Config.hpp"
 #include "SZ3/utils/Statistic.hpp"
 
@@ -13,6 +14,14 @@ template <class T, uint N>
 size_t SZ_compress_dispatcher(Config &conf, const T *data, uchar *cmpData, size_t cmpCap) {
     assert(N == conf.N);
     calAbsErrorBound(conf, data);
+
+    auto qoi = GetQOI<T, N>(conf);
+    if (qoi) {
+        conf.ebs.resize(conf.num);
+        for (size_t i = 0; i < conf.num; ++i)
+            conf.ebs[i] = qoi->interpret_eb(data[i]);
+    }
+
     size_t cmpSize = 0;
 
     // if absErrorBound is 0, use lossless only mode

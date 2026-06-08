@@ -2,6 +2,7 @@
 #define SZ3_QUANTIZER_HPP
 
 #include <SZ3/def.hpp>
+#include <vector>
 
 namespace SZ3::concepts {
 
@@ -67,6 +68,22 @@ class   QuantizerInterface {
     virtual void postdecompress_data() {}
 
     virtual void print() {}
+};
+
+template <class Ti, class To>
+class QpetQntIf : public QuantizerInterface<Ti, To> {
+   public:
+    virtual ~QpetQntIf() = default;
+
+    virtual To qnt_overwrite(Ti &d, Ti pred, Ti eb) = 0;
+
+    virtual Ti recv(Ti pred, To qi, Ti eb) = 0;
+
+    virtual Ti recv_eb(To qe) = 0;
+
+    virtual void flush(std::vector<To> &out) = 0;
+
+    virtual void clear_bufs() = 0;
 };
 }  // namespace SZ3::concepts
 
