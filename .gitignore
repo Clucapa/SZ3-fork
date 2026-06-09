@@ -15,3 +15,6 @@ test
 QoZ
 QoZ_note
 
+CMakeSettings.json
+.vs
+.vscode
