@@ -1,6 +1,6 @@
 # SZ3 QPET 插件实现说明
 
-本仓库在 SZ3 v3.3.2 基础上实现了 QPET (Quality-oriented Point-wise Error-bounded Tuning) 插件——逐点误差控制有损压缩器。
+本仓库在 SZ3 v3.3.2 基础上，以相对独立模块化的方式，实现了 QPET 插件。
 
 ## 工作流变更
 
@@ -22,15 +22,12 @@
 关键差异：
 1. **量化前增加 eb 预算**：QoI 实例逐点计算误差界，存入 `conf.ebs`
 2. **量化器改为 QpetQnt**：两步操作（先量化 eb 得 qi_eb，再用量化后的 eb' 量化残差得 qi_data），eb' ≤ 原始 eb（安全）
-3. **输出格式统一**：始终为 `[所有qi_eb | 所有qi_data]`，Huffman 编码器无需修改（共用一棵树）
-4. **合规回退**：`check_comply` 失败时标记为不可预测，数据原样存入 `unpred` 数组
 
 ## 总体思路
 
-- QPET 不是新的压缩算法，而是在预测器之前的**误差界变换层**
 - 通过 QoI 函数（如 f(x)=x²）将全局误差界转换为逐点误差界
 - 预测器选择（Lorenzo/Regression/Composed）不受影响，自由组合
-- 即使 qoi=0（默认 f(x)=x），也走 QPET 量化器，文件格式统一
+- 即使 qoi=0（不启用 qoi 控制功能），也走 QPET 量化器（默认 f(x)=x），文件格式统一
 
 ## 新增模块
 
