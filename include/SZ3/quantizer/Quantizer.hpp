@@ -2,7 +2,6 @@
 #define SZ3_QUANTIZER_HPP
 
 #include <SZ3/def.hpp>
-#include <vector>
 
 namespace SZ3::concepts {
 
@@ -80,10 +79,6 @@ class QpetQntIf : public QuantizerInterface<Ti, To> {
     virtual Ti recv(Ti pred, To qi, Ti eb) = 0;
 
     virtual Ti recv_eb(To qe) = 0;
-
-    virtual void flush(std::vector<To> &out) = 0;
-
-    virtual void clear_bufs() = 0;
 };
 }  // namespace SZ3::concepts
 

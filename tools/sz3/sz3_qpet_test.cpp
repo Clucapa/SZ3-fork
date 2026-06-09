@@ -66,7 +66,7 @@ int main() {
         double *dec = SZ_decompress<double>(conf2,
                         reinterpret_cast<const char*>(cmp.data()), cmpSize);
         fprintf(stderr, "[8] decompressed, dec=%p, conf2.num=%zu\n",
-                (void*)dec, conf2.num); fflush(stderr);
+                                static_cast<void*>(dec), conf2.num); fflush(stderr);
 
         if (!dec) { printf("FAIL: dec is null\n"); fail++; delete[] dec; goto next_test_1; }
         if (conf2.num != n) { printf("FAIL: num mismatch %zu vs %zu\n", conf2.num, n); fail++; delete[] dec; goto next_test_1; }
@@ -103,7 +103,7 @@ int main() {
         SZ3::Config conf2;
         double *dec = SZ_decompress<double>(conf2,
                         reinterpret_cast<const char*>(cmp.data()), cmpSize);
-        fprintf(stderr, "[T2] decompressed, dec=%p, num=%zu\n", (void*)dec, conf2.num); fflush(stderr);
+        fprintf(stderr, "[T2] decompressed, dec=%p, num=%zu\n",                 static_cast<void*>(dec), conf2.num); fflush(stderr);
 
         if (!dec) { printf("FAIL T2: dec is null\n"); fail++; delete[] dec; goto end; }
         if (conf2.num != n) { printf("FAIL T2: num mismatch %zu vs %zu\n", conf2.num, n); fail++; delete[] dec; goto end; }

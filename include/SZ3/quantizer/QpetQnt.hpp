@@ -28,15 +28,16 @@ public:
     }
 
     // ---------- QpetQntIf 核心 ----------
+
+    // ① log 有损变换 eb (floor -> 安全), 返回 qi_eb
+    ALWAYS_INLINE int qnt_eb(T &eb) { return eb_log.qnt_overwrite(eb); }
+
+    // ② 用量化后的 eb' 量化 |data-pred|, 返回 qi_data
     ALWAYS_INLINE int qnt_overwrite(T &d, T pred, T eb) override {
         if (eb == 0) {
             unpred.push_back(d);
-            buf_eb.push_back(0);
-            buf_d.push_back(0);
             return 0;
         }
-        int qe = eb_log.qnt_overwrite(eb);  // ① log 有损变换, eb 被覆写
-        buf_eb.push_back(qe);
 
         T diff = d - pred;
         auto qi64 = static_cast<int64_t>(fabs(diff) / eb) + 1;
@@ -55,15 +56,12 @@ public:
             T dec = pred + qi * eb;
             if (fabs(dec - d) > eb) {
                 unpred.push_back(d);
-                buf_d.push_back(0);
                 return 0;
             }
             d = dec;
-            buf_d.push_back(qs);
             return qs;
         }
         unpred.push_back(d);
-        buf_d.push_back(0);
         return 0;
     }
 
@@ -76,29 +74,14 @@ public:
         return eb_log.recv_eb(qe);
     }
 
-    void flush(std::vector<int> &out) override {
-        out.insert(out.end(), buf_eb.begin(), buf_eb.end());
-        out.insert(out.end(), buf_d.begin(), buf_d.end());
-        buf_eb.clear();
-        buf_d.clear();
-    }
-
-    void clear_bufs() override {
-        buf_eb.clear();
-        buf_d.clear();
-    }
-
     std::pair<int, int> get_out_range() const override {
         auto r = eb_log.get_out_range();
         return std::make_pair(0, std::max(rd * 2, r.second));
     }
 
-    void precompress_data() override { clear_bufs(); }
-
+    void precompress_data() override {}
     void postcompress_data() override {}
-
-    void predecompress_data() override { clear_bufs(); }
-
+    void predecompress_data() override {}
     void postdecompress_data() override {}
 
     void save(uchar *&c) const override {
@@ -133,8 +116,6 @@ private:
     int rd;
     EBLogQnt<T> eb_log;
     std::vector<T> unpred;
-    std::vector<int> buf_eb;
-    std::vector<int> buf_d;
     size_t idx = 0;
 };
 

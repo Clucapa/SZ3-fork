@@ -32,8 +32,9 @@ public:
     std::vector<int> compress(const Config &conf, T *data) override {
         auto dpad = std::make_shared<block_data<T, N>>(data, conf.dims, pred.get_padding(), true);
         auto blk = dpad->block_iter(conf.blockSize);
-        std::vector<int> qis;
-        qis.reserve(conf.num * 2);
+        std::vector<int> qebs, qds;
+        qebs.reserve(conf.num);
+        qds.reserve(conf.num);
         size_t off = 0;
 
         do {
@@ -45,17 +46,26 @@ public:
                 T eb = conf.ebs[off++];
                 T prd = pwb->predict(blk, c, ix);
                 T ori = *c;
-                qnt.qnt_overwrite(*c, prd, eb);
+
+                int qe = qnt.qnt_eb(eb);          // ① log 变换 eb
+                int qd = qnt.qnt_overwrite(*c, prd, eb); // ② 量化残差
+                qebs.push_back(qe);
+                qds.push_back(qd);
 
                 if (!qoi->check_comply(ori, *c)) {
                     *c = ori;
-                    qnt.qnt_overwrite(*c, static_cast<T>(0), static_cast<T>(0));
+                    qebs.back() = qnt.qnt_eb(eb = static_cast<T>(0));
+                    if (qd != 0) {
+                        qds.back() = qnt.qnt_overwrite(*c, static_cast<T>(0), static_cast<T>(0));
+                    }
                 }
             });
-
-            qnt.flush(qis);
         } while (blk.next());
 
+        std::vector<int> qis;
+        qis.reserve(conf.num * 2);
+        qis.insert(qis.end(), qebs.begin(), qebs.end());
+        qis.insert(qis.end(), qds.begin(),  qds.end());
         return qis;
     }
 
