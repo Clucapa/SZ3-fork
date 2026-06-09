@@ -267,6 +267,17 @@ class Config {
                     interpAlpha = std::stod(value);
                 else if (eq(key, "InterpolationBeta"))
                     interpBeta = std::stod(value);
+            } else if (eq(section, "QoISettings")) {
+                if (eq(key, "qoi"))
+                    qoi = std::stoi(value);
+                else if (eq(key, "qoiEB"))
+                    qEB = std::stod(value);
+                else if (eq(key, "qoiEBBase"))
+                    qEBase = std::stod(value);
+                else if (eq(key, "qoiEBLogBase"))
+                    qELogB = std::stod(value);
+                else if (eq(key, "qoiQuantbinCnt"))
+                    qR = std::stoi(value);
             }
         }
     }
@@ -300,6 +311,14 @@ class Config {
         ss << "InterpolationAnchorStride = " << interpAnchorStride << "\n";
         ss << "InterpolationAlpha = " << interpAlpha << "\n";
         ss << "InterpolationBeta = " << interpBeta << "\n";
+
+        ss << "\n[QoISettings]\n";
+        ss << "qoi = " << qoi << "\n";
+        ss << "qoiEB = " << qEB << "\n";
+        ss << "qoiEBBase = " << qEBase << "\n";
+        ss << "qoiEBLogBase = " << qELogB << "\n";
+        ss << "qoiQuantbinCnt = " << qR << "\n";
+
         return ss.str();
     }
 

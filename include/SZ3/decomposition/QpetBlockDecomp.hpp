@@ -48,7 +48,7 @@ public:
                 T ori = *c;
 
                 int qe = qnt.qnt_eb(eb);          // ① log 变换 eb
-                int qd = qnt.qnt_overwrite(*c, prd, eb); // ② 量化残差
+                int qd = qnt.qnt_overwrite(*c, prd, eb); // ② 量化残差 
                 qebs.push_back(qe);
                 qds.push_back(qd);
 
