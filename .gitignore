@@ -12,7 +12,6 @@ install
 sz3_install
 sz3_build
 test
-QoZ
 QoZ_note
 
 CMakeSettings.json

@@ -74,15 +74,41 @@ size_t SZ_compress_LorenzoReg(Config &conf, T *data, uchar *cmpData, size_t cmpC
     calAbsErrorBound(conf, data);
 
     auto qoi     = GetQOI<T, N>(conf);
-    auto pred    = LorenzoPredictor<T, N, 1>(conf.absErrorBound);
     auto qnt     = QpetQnt<T>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB,
                                conf.qR, conf.absErrorBound);
     auto encoder = HuffmanEncoder<int>();
     auto lossless = Lossless_zstd();
-    auto decomp  = QpetBlockDecomp<T, N, decltype(pred), decltype(qnt)>(
-                        conf, pred, qnt, qoi);
-    auto sz = make_compressor_sz_generic<T, N>(decomp, encoder, lossless);
-    return sz->compress(conf, data, cmpData, cmpCap);
+
+    int methodCnt = (conf.lorenzo + conf.lorenzo2 + conf.regression);
+    int single = (methodCnt == 1);
+    if (methodCnt == 0) {
+        throw std::invalid_argument("All lorenzo and regression methods are disabled.");
+    }
+
+    if (conf.lorenzo && single) {
+        auto decomp = QpetBlockDecomp<T, N, LorenzoPredictor<T, N, 1>, QpetQnt<T>>(
+                          conf, LorenzoPredictor<T, N, 1>(conf.absErrorBound), qnt, qoi);
+        return make_compressor_sz_generic<T, N>(decomp, encoder, lossless)->compress(conf, data, cmpData, cmpCap);
+    }
+    if (conf.lorenzo2 && single) {
+        auto decomp = QpetBlockDecomp<T, N, LorenzoPredictor<T, N, 2>, QpetQnt<T>>(
+                          conf, LorenzoPredictor<T, N, 2>(conf.absErrorBound), qnt, qoi);
+        return make_compressor_sz_generic<T, N>(decomp, encoder, lossless)->compress(conf, data, cmpData, cmpCap);
+    }
+    if (conf.regression && single) {
+        auto decomp = QpetBlockDecomp<T, N, RegressionPredictor<T, N>, QpetQnt<T>>(
+                          conf, RegressionPredictor<T, N>(conf.blockSize, conf.absErrorBound), qnt, qoi);
+        return make_compressor_sz_generic<T, N>(decomp, encoder, lossless)->compress(conf, data, cmpData, cmpCap);
+    }
+
+    // composed predictor
+    std::vector<std::shared_ptr<concepts::PredictorInterface<T, N>>> preds;
+    if (conf.lorenzo)   preds.push_back(std::make_shared<LorenzoPredictor<T, N, 1>>(conf.absErrorBound));
+    if (conf.lorenzo2)  preds.push_back(std::make_shared<LorenzoPredictor<T, N, 2>>(conf.absErrorBound));
+    if (conf.regression) preds.push_back(std::make_shared<RegressionPredictor<T, N>>(conf.blockSize, conf.absErrorBound));
+    auto decomp = QpetBlockDecomp<T, N, ComposedPredictor<T, N>, QpetQnt<T>>(
+                      conf, ComposedPredictor<T, N>(preds), qnt, qoi);
+    return make_compressor_sz_generic<T, N>(decomp, encoder, lossless)->compress(conf, data, cmpData, cmpCap);
 }
 
 template <class T, uint N>
@@ -91,15 +117,47 @@ void SZ_decompress_LorenzoReg(const Config &conf, const uchar *cmpData,
     assert(conf.cmprAlgo == ALGO_LORENZO_REG);
 
     auto qoi     = GetQOI<T, N>(conf);
-    auto pred    = LorenzoPredictor<T, N, 1>(conf.absErrorBound);
     auto qnt     = QpetQnt<T>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB,
                                conf.qR, conf.absErrorBound);
     auto encoder = HuffmanEncoder<int>();
     auto lossless = Lossless_zstd();
-    auto decomp  = QpetBlockDecomp<T, N, decltype(pred), decltype(qnt)>(
-                        conf, pred, qnt, qoi);
-    auto sz = make_compressor_sz_generic<T, N>(decomp, encoder, lossless);
-    sz->decompress(conf, cmpData, cmpSize, decData);
+
+    bool lorenzo   = conf.lorenzo;
+    bool lorenzo2  = conf.lorenzo2;
+    bool regression = conf.regression;
+    int methodCnt = (lorenzo + lorenzo2 + regression);
+    int single = (methodCnt == 1);
+    if (methodCnt == 0) {
+        lorenzo = true;
+        methodCnt = 1; single = 1;
+    }
+
+    if (lorenzo && single) {
+        auto decomp = QpetBlockDecomp<T, N, LorenzoPredictor<T, N, 1>, QpetQnt<T>>(
+                          conf, LorenzoPredictor<T, N, 1>(conf.absErrorBound), qnt, qoi);
+        make_compressor_sz_generic<T, N>(decomp, encoder, lossless)->decompress(conf, cmpData, cmpSize, decData);
+        return;
+    }
+    if (lorenzo2 && single) {
+        auto decomp = QpetBlockDecomp<T, N, LorenzoPredictor<T, N, 2>, QpetQnt<T>>(
+                          conf, LorenzoPredictor<T, N, 2>(conf.absErrorBound), qnt, qoi);
+        make_compressor_sz_generic<T, N>(decomp, encoder, lossless)->decompress(conf, cmpData, cmpSize, decData);
+        return;
+    }
+    if (regression && single) {
+        auto decomp = QpetBlockDecomp<T, N, RegressionPredictor<T, N>, QpetQnt<T>>(
+                          conf, RegressionPredictor<T, N>(conf.blockSize, conf.absErrorBound), qnt, qoi);
+        make_compressor_sz_generic<T, N>(decomp, encoder, lossless)->decompress(conf, cmpData, cmpSize, decData);
+        return;
+    }
+
+    std::vector<std::shared_ptr<concepts::PredictorInterface<T, N>>> preds;
+    if (lorenzo)   preds.push_back(std::make_shared<LorenzoPredictor<T, N, 1>>(conf.absErrorBound));
+    if (lorenzo2)  preds.push_back(std::make_shared<LorenzoPredictor<T, N, 2>>(conf.absErrorBound));
+    if (regression) preds.push_back(std::make_shared<RegressionPredictor<T, N>>(conf.blockSize, conf.absErrorBound));
+    auto decomp = QpetBlockDecomp<T, N, ComposedPredictor<T, N>, QpetQnt<T>>(
+                      conf, ComposedPredictor<T, N>(preds), qnt, qoi);
+    make_compressor_sz_generic<T, N>(decomp, encoder, lossless)->decompress(conf, cmpData, cmpSize, decData);
 }
 
 }  // namespace SZ3
