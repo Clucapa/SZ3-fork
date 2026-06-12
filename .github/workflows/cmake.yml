@@ -57,6 +57,24 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel 4
 
+      - name: Run QoI-related tests
+        run: |
+          TESTS="test_qpet_qoi test_qpet_eb_provider test_qpet_regional"
+          all_passed=0
+          for t in $TESTS; do
+            if ./test/bin/$t; then
+              echo "✓ $t passed"
+            else
+              echo "✗ $t FAILED"
+              all_passed=1
+            fi
+          done
+          if [ $all_passed -eq 1 ]; then
+            echo "::error::Some QoI tests failed"
+            exit 1
+          fi
+          echo "All QoI tests passed"
+
   build-windows:
     name: Build (Windows)
     runs-on: windows-latest
