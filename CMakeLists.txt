@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
 project(SZ3TestBuild VERSION 3.3.2)
+enable_testing()
 
 # Test-oriented build entry for SZ3:
 # - no install rules
@@ -95,6 +96,9 @@ if (BUILD_SZ3_BINARY)
     add_subdirectory(tools/sz3)
     add_subdirectory(tools/sz3c)
 endif ()
+
+# Test modules
+add_subdirectory(tools/test)
 
 # Optional tools disabled in test-oriented build.
 set(BUILD_TESTING OFF CACHE BOOL "Build tests" FORCE)

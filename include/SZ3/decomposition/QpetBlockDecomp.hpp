@@ -7,6 +7,10 @@
 #include "SZ3/predictor/LorenzoPredictor.hpp"
 #include "SZ3/predictor/Predictor.hpp"
 #include "SZ3/qoi/QoI.hpp"
+#include "SZ3/qoi/EBProvider.hpp"
+#include "SZ3/qoi/PointwiseEBProvider.hpp"
+#include "SZ3/qoi/RegionalMean.hpp"
+#include "SZ3/qoi/RegionalMeanSq.hpp"
 #include "SZ3/quantizer/Quantizer.hpp"
 #include "SZ3/utils/Config.hpp"
 #include "SZ3/utils/FileUtil.hpp"
@@ -35,7 +39,20 @@ public:
         std::vector<int> qebs, qds;
         qebs.reserve(conf.num);
         qds.reserve(conf.num);
-        size_t off = 0;
+
+        std::unique_ptr<concepts::EBProvider<T>> eb_provider;
+        if (qoi->id == 10) {
+            eb_provider = std::make_unique<RegionalMeanEBProvider<T, N>>(
+                static_cast<QoI_RegionalMean<T, N>*>(qoi.get()));
+        } else if (qoi->id == 11) {
+            eb_provider = std::make_unique<RegionalMeanSqEBProvider<T, N>>(
+                static_cast<QoI_RegionalMeanSq<T, N>*>(qoi.get()));
+        } else {
+            eb_provider = std::make_unique<PointwiseEBProvider<T>>(
+                conf.ebs.data(), conf.ebs.size());
+        }
+
+        eb_provider->precompress_block(conf.num);
 
         do {
             concepts::PredictorInterface<T, N> *pwb = &pred;
@@ -43,12 +60,12 @@ public:
             pwb->precompress_block_commit();
 
             Block_iter::foreach (blk, [&](T *c, const std::array<size_t, N> &ix) {
-                T eb = conf.ebs[off++];
-                T prd = pwb->predict(blk, c, ix);
                 T ori = *c;
+                T prd = pwb->predict(blk, c, ix);
+                T eb = eb_provider->advance(ori, *c);
 
-                int qe = qnt.qnt_eb(eb);          // ① log 变换 eb
-                int qd = qnt.qnt_overwrite(*c, prd, eb); // ② 量化残差 
+                int qe = qnt.qnt_eb(eb);
+                int qd = qnt.qnt_overwrite(*c, prd, eb);
                 qebs.push_back(qe);
                 qds.push_back(qd);
 
@@ -62,6 +79,8 @@ public:
             });
         } while (blk.next());
 
+        eb_provider->postcompress_block();
+
         std::vector<int> qis;
         qis.reserve(conf.num * 2);
         qis.insert(qis.end(), qebs.begin(), qebs.end());
@@ -73,6 +92,20 @@ public:
         int *qeb = &qis[0];
         int *qd  = &qis[conf.num];
 
+        std::unique_ptr<concepts::EBProvider<T>> eb_provider;
+        if (qoi->id == 10) {
+            eb_provider = std::make_unique<RegionalMeanEBProvider<T, N>>(
+                static_cast<QoI_RegionalMean<T, N>*>(qoi.get()));
+        } else if (qoi->id == 11) {
+            eb_provider = std::make_unique<RegionalMeanSqEBProvider<T, N>>(
+                static_cast<QoI_RegionalMeanSq<T, N>*>(qoi.get()));
+        } else {
+            eb_provider = std::make_unique<PointwiseEBProvider<T>>(
+                conf.ebs.data(), conf.ebs.size());
+        }
+
+        eb_provider->precompress_block(conf.num);
+
         auto dpad = std::make_shared<block_data<T, N>>(dec, conf.dims, pred.get_padding(), false);
         auto blk = dpad->block_iter(conf.blockSize);
         do {
@@ -82,8 +115,11 @@ public:
                 T eb = qnt.recv_eb(*(qeb++));
                 T prd = pwb->predict(blk, c, ix);
                 *c = qnt.recv(prd, *(qd++), eb);
+                eb_provider->advance();
             });
         } while (blk.next());
+
+        eb_provider->postcompress_block();
 
         return dec;
     }

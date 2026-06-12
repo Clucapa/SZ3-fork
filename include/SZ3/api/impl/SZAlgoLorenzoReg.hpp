@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "SZ3/compressor/SZGenericCompressor.hpp"
-#include "SZ3/decomposition/BlockwiseDecomposition.hpp"
 #include "SZ3/decomposition/QpetBlockDecomp.hpp"
 #include "SZ3/def.hpp"
 #include "SZ3/encoder/HuffmanEncoder.hpp"
@@ -14,59 +13,12 @@
 #include "SZ3/predictor/LorenzoPredictor.hpp"
 #include "SZ3/predictor/RegressionPredictor.hpp"
 #include "SZ3/qoi/QoIIf.hpp"
-#include "SZ3/quantizer/LinearQuantizer.hpp"
 #include "SZ3/quantizer/QpetQnt.hpp"
 #include "SZ3/utils/Config.hpp"
-#include "SZ3/utils/Iterator.hpp"
 #include "SZ3/utils/QuantOptimization.hpp"
 #include "SZ3/utils/Statistic.hpp"
 
 namespace SZ3 {
-template <class T, uint N, class Quantizer, class Encoder, class Lossless>
-std::shared_ptr<concepts::CompressorInterface<T>> make_compressor_lorenzo_regression(const Config &conf,
-                                                                                     Quantizer quantizer,
-                                                                                     Encoder encoder,
-                                                                                     Lossless lossless) {
-    std::vector<std::shared_ptr<concepts::PredictorInterface<T, N>>> predictors;
-
-    int methodCnt = (conf.lorenzo + conf.lorenzo2 + conf.regression);
-    int use_single_predictor = (methodCnt == 1);
-    if (methodCnt == 0) {
-        throw std::invalid_argument("All lorenzo and regression methods are disabled.");
-    }
-    if (conf.lorenzo) {
-        if (use_single_predictor) {
-            return make_compressor_sz_generic<T, N>(
-                make_decomposition_blockwise<T, N>(conf, LorenzoPredictor<T, N, 1>(conf.absErrorBound), quantizer),
-                encoder, lossless);
-        } else {
-            predictors.push_back(std::make_shared<LorenzoPredictor<T, N, 1>>(conf.absErrorBound));
-        }
-    }
-    if (conf.lorenzo2) {
-        if (use_single_predictor) {
-            return make_compressor_sz_generic<T, N>(
-                make_decomposition_blockwise<T, N>(conf, LorenzoPredictor<T, N, 2>(conf.absErrorBound), quantizer),
-                encoder, lossless);
-        } else {
-            predictors.push_back(std::make_shared<LorenzoPredictor<T, N, 2>>(conf.absErrorBound));
-        }
-    }
-    if (conf.regression) {
-        if (use_single_predictor) {
-            return make_compressor_sz_generic<T, N>(
-                make_decomposition_blockwise<T, N>(conf, RegressionPredictor<T, N>(conf.blockSize, conf.absErrorBound),
-                                                   quantizer),
-                encoder, lossless);
-        } else {
-            predictors.push_back(std::make_shared<RegressionPredictor<T, N>>(conf.blockSize, conf.absErrorBound));
-        }
-    }
-
-    return make_compressor_sz_generic<T, N>(
-        make_decomposition_blockwise<T, N>(conf, ComposedPredictor<T, N>(predictors), quantizer), encoder, lossless);
-}
-
 template <class T, uint N>
 size_t SZ_compress_LorenzoReg(Config &conf, T *data, uchar *cmpData, size_t cmpCap) {
     assert(N == conf.N);
