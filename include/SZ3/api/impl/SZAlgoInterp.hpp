@@ -4,8 +4,11 @@
 #include "SZ3/api/impl/SZAlgoLorenzoReg.hpp"
 #include "SZ3/decomposition/BlockwiseDecomposition.hpp"
 #include "SZ3/decomposition/InterpolationDecomposition.hpp"
+#include "SZ3/decomposition/QpetInterpDecomp.hpp"
 #include "SZ3/lossless/Lossless_zstd.hpp"
+#include "SZ3/qoi/QoIIf.hpp"
 #include "SZ3/quantizer/LinearQuantizer.hpp"
+#include "SZ3/quantizer/QpetQnt.hpp"
 #include "SZ3/utils/Config.hpp"
 #include "SZ3/utils/Extraction.hpp"
 #include "SZ3/utils/QuantOptimization.hpp"
@@ -37,6 +40,41 @@ void SZ_decompress_Interp(const Config &conf, const uchar *cmpData, size_t cmpSi
         make_decomposition_interpolation<T, N>(conf, LinearQuantizer<T>(conf.absErrorBound, conf.quantbinCnt / 2)),
         HuffmanEncoder<int>(), Lossless_zstd());
     sz->decompress(conf, cmpDataPos, cmpSize, decData);
+}
+
+template <class T, uint N>
+size_t SZ_compress_Interp_qpet(Config &conf, T *data, uchar *cmpData, size_t cmpCap) {
+    assert(N == conf.N);
+    assert(conf.cmprAlgo == ALGO_INTERP);
+    calAbsErrorBound(conf, data);
+    if (conf.interpAnchorStride < 0) {
+        std::array<size_t, 4> anchor_strides = {4096, 128, 32, 16};
+        conf.interpAnchorStride = anchor_strides[N - 1];
+    }
+
+    auto qoi     = GetQOI<T, N>(conf);
+    auto qnt     = QpetQnt<T>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB,
+                               conf.qR, conf.absErrorBound);
+    auto encoder = HuffmanEncoder<int>();
+    auto lossless = Lossless_zstd();
+
+    auto decomp = QpetInterpDecomp<T, N, QpetQnt<T>>(conf, qnt, qoi);
+    return make_compressor_sz_generic<T, N>(decomp, encoder, lossless)->compress(conf, data, cmpData, cmpCap);
+}
+
+template <class T, uint N>
+void SZ_decompress_Interp_qpet(const Config &conf, const uchar *cmpData,
+                                size_t cmpSize, T *decData) {
+    assert(conf.cmprAlgo == ALGO_INTERP);
+
+    auto qoi     = GetQOI<T, N>(conf);
+    auto qnt     = QpetQnt<T>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB,
+                               conf.qR, conf.absErrorBound);
+    auto encoder = HuffmanEncoder<int>();
+    auto lossless = Lossless_zstd();
+
+    auto decomp = QpetInterpDecomp<T, N, QpetQnt<T>>(conf, qnt, qoi);
+    make_compressor_sz_generic<T, N>(decomp, encoder, lossless)->decompress(conf, cmpData, cmpSize, decData);
 }
 
 template <class T, uint N>

@@ -37,7 +37,11 @@ size_t SZ_compress_dispatcher(Config &conf, const T *data, uchar *cmpData, size_
             if (conf.cmprAlgo == ALGO_LORENZO_REG) {
                 cmpSize = SZ_compress_LorenzoReg<T, N>(conf, dataCopy.data(), cmpData, cmpCap);
             } else if (conf.cmprAlgo == ALGO_INTERP) {
-                cmpSize = SZ_compress_Interp<T, N>(conf, dataCopy.data(), cmpData, cmpCap);
+                if (conf.qoi >= 12) {
+                    cmpSize = SZ_compress_Interp_qpet<T, N>(conf, dataCopy.data(), cmpData, cmpCap);
+                } else {
+                    cmpSize = SZ_compress_Interp<T, N>(conf, dataCopy.data(), cmpData, cmpCap);
+                }
             } else if (conf.cmprAlgo == ALGO_INTERP_LORENZO) {
                 cmpSize = SZ_compress_Interp_lorenzo<T, N>(conf, dataCopy.data(), cmpData, cmpCap);
             } else if (conf.cmprAlgo == ALGO_NOPRED) {
@@ -97,7 +101,11 @@ void SZ_decompress_dispatcher(Config &conf, const uchar *cmpData, size_t cmpSize
     } else if (conf.cmprAlgo == ALGO_LORENZO_REG) {
         SZ_decompress_LorenzoReg<T, N>(conf, cmpData, cmpSize, decData);
     } else if (conf.cmprAlgo == ALGO_INTERP) {
-        SZ_decompress_Interp<T, N>(conf, cmpData, cmpSize, decData);
+        if (conf.qoi >= 12) {
+            SZ_decompress_Interp_qpet<T, N>(conf, cmpData, cmpSize, decData);
+        } else {
+            SZ_decompress_Interp<T, N>(conf, cmpData, cmpSize, decData);
+        }
     } else if (conf.cmprAlgo == ALGO_NOPRED) {
         SZ_decompress_nopred<T, N>(conf, cmpData, cmpSize, decData);
     } else if (conf.cmprAlgo == ALGO_BIOMD) {

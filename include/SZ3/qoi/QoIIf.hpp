@@ -7,6 +7,8 @@
 #include "SZ3/qoi/QoIX2.hpp"
 #include "SZ3/qoi/RegionalMean.hpp"
 #include "SZ3/qoi/RegionalMeanSq.hpp"
+#include "SZ3/qoi/QoI_RegionalAvgInterp.hpp"
+#include "SZ3/qoi/QoI_RegionalMeanSqInterp.hpp"
 #include "SZ3/utils/Config.hpp"
 
 namespace SZ3 {
@@ -22,6 +24,10 @@ std::shared_ptr<concepts::QoIIf<T, N>> GetQOI(const Config &conf) {
             return std::make_shared<QoI_RegionalMean<T, N>>(conf.qEB, conf.absErrorBound);
         case 11:
             return std::make_shared<QoI_RegionalMeanSq<T, N>>(conf.qEB, conf.absErrorBound);
+        case 12:
+            return std::make_shared<QoI_RegionalAvgInterp<T, N>>(conf.qEB, conf.absErrorBound);
+        case 13:
+            return std::make_shared<QoI_RegionalMeanSqInterp<T, N>>(conf.qEB, conf.absErrorBound);
         default:
             return nullptr;
     }
