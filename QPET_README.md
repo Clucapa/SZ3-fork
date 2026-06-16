@@ -76,6 +76,27 @@
 
 解压端: `qi_vec` 前 `conf.num` 个为 qi_eb，后 `conf.num` 个为 qi_data。
 
+## CI
+
+commit message 末尾可选 `[关键字...]` 控制 CI 行为。关键字用空格隔开：
+
+| 关键字 | 效果 |
+|--------|------|
+| `[build]` | Linux 编译 |
+| `[test]` 或 `[test build]` | Linux 编译 + QoI 单元测试 |
+| `[]` | 仅检查非 ASCII 字符 |
+
+non‑ASCII 检查始终执行。示例：
+
+```
+ci: tweak params
+                           ← 仅 non‑ASCII 检查
+ci: add feature [build]
+                           ← non‑ASCII + Linux 编译
+ci: fix bug [test build]
+                           ← non‑ASCII + Linux 编译 + 测试
+```
+
 ## 编译与测试
 
 ```bash
