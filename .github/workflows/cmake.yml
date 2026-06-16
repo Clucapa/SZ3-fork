@@ -88,7 +88,7 @@ jobs:
       - name: Run QoI-related tests
         if: needs.parse-commit.outputs.run_test == 'true'
         run: |
-          TESTS="test_qpet_qoi test_qpet_eb_provider test_qpet_regional test_qpet_interp"
+          TESTS="test_qpet_qoi test_qpet_eb_provider test_qpet_regional test_qpet_interp test_qpet_composite"
           all_passed=0
           for t in $TESTS; do
             if ./test/bin/$t; then

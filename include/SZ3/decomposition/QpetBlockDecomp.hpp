@@ -8,9 +8,6 @@
 #include "SZ3/predictor/Predictor.hpp"
 #include "SZ3/qoi/QoI.hpp"
 #include "SZ3/qoi/EBProvider.hpp"
-#include "SZ3/qoi/PointwiseEBProvider.hpp"
-#include "SZ3/qoi/RegionalMean.hpp"
-#include "SZ3/qoi/RegionalMeanSq.hpp"
 #include "SZ3/quantizer/Quantizer.hpp"
 #include "SZ3/utils/Config.hpp"
 #include "SZ3/utils/FileUtil.hpp"
@@ -40,18 +37,7 @@ public:
         qebs.reserve(conf.num);
         qds.reserve(conf.num);
 
-        std::unique_ptr<concepts::EBProvider<T>> eb_provider;
-        if (qoi->id == 10) {
-            eb_provider = std::make_unique<RegionalMeanEBProvider<T, N>>(
-                static_cast<QoI_RegionalMean<T, N>*>(qoi.get()));
-        } else if (qoi->id == 11) {
-            eb_provider = std::make_unique<RegionalMeanSqEBProvider<T, N>>(
-                static_cast<QoI_RegionalMeanSq<T, N>*>(qoi.get()));
-        } else {
-            eb_provider = std::make_unique<PointwiseEBProvider<T>>(
-                conf.ebs.data(), conf.ebs.size());
-        }
-
+        auto eb_provider = qoi->create_eb_provider(conf);
         eb_provider->precompress_block(conf.num);
 
         do {
@@ -92,18 +78,7 @@ public:
         int *qeb = &qis[0];
         int *qd  = &qis[conf.num];
 
-        std::unique_ptr<concepts::EBProvider<T>> eb_provider;
-        if (qoi->id == 10) {
-            eb_provider = std::make_unique<RegionalMeanEBProvider<T, N>>(
-                static_cast<QoI_RegionalMean<T, N>*>(qoi.get()));
-        } else if (qoi->id == 11) {
-            eb_provider = std::make_unique<RegionalMeanSqEBProvider<T, N>>(
-                static_cast<QoI_RegionalMeanSq<T, N>*>(qoi.get()));
-        } else {
-            eb_provider = std::make_unique<PointwiseEBProvider<T>>(
-                conf.ebs.data(), conf.ebs.size());
-        }
-
+        auto eb_provider = qoi->create_eb_provider(conf);
         eb_provider->precompress_block(conf.num);
 
         auto dpad = std::make_shared<block_data<T, N>>(dec, conf.dims, pred.get_padding(), false);

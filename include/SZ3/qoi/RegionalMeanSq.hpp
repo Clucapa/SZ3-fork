@@ -9,6 +9,9 @@
 
 namespace SZ3 {
 
+template <typename T, uint N>
+class RegionalMeanSqEBProvider;
+
 template <class T, uint N>
 class QoI_RegionalMeanSq : public concepts::QoIIf<T, N> {
 public:
@@ -45,6 +48,15 @@ public:
     void set_geb(T eb) override { geb_ = eb; }
     double get_tol() const override { return tol_; }
     void set_tol(double t) override { tol_ = t; }
+
+    double eval(T val) const override {
+        return static_cast<double>(val) * val;
+    }
+
+    std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
+            const Config &) override {
+        return std::make_unique<RegionalMeanSqEBProvider<T, N>>(this);
+    }
 
 private:
     double tol_;

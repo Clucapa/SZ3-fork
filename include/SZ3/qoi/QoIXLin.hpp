@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include "SZ3/qoi/QoI.hpp"
+#include "SZ3/qoi/PointwiseEBProvider.hpp"
+#include "SZ3/utils/Config.hpp"
 
 namespace SZ3 {
 
@@ -21,6 +23,18 @@ public:
     bool check_comply(T orig, T dec) const override {
         return fabs(orig - dec) <= tol;
     }
+
+    double eval(T val) const override {
+        return static_cast<double>(val);
+    }
+
+    std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
+            const Config &conf) override {
+        return std::make_unique<PointwiseEBProvider<T>>(
+            conf.ebs.data(), conf.ebs.size());
+    }
+
+    bool is_pointwise() const override { return true; }
 
     T get_geb() const override { return geb; }
     void set_geb(T eb) override { geb = eb; }

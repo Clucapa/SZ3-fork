@@ -16,7 +16,7 @@ size_t SZ_compress_dispatcher(Config &conf, const T *data, uchar *cmpData, size_
     calAbsErrorBound(conf, data);
 
     auto qoi = GetQOI<T, N>(conf);
-    if (qoi && qoi->id < 10) {
+    if (qoi && qoi->is_pointwise()) {
         conf.ebs.resize(conf.num);
         for (size_t i = 0; i < conf.num; ++i)
             conf.ebs[i] = qoi->interpret_eb(data[i]);

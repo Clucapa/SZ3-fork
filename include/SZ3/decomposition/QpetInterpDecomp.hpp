@@ -48,7 +48,7 @@ public:
 
         init();
 
-        std::unique_ptr<concepts::EBProvider<T>> eb_provider = create_eb_provider();
+        auto eb_provider = qoi->create_eb_provider(conf);
 
         std::vector<int> qebs, qds;
         qebs.reserve(num_elements);
@@ -130,7 +130,7 @@ public:
 
         init();
 
-        std::unique_ptr<concepts::EBProvider<T>> eb_provider = create_eb_provider();
+        auto eb_provider = qoi->create_eb_provider(conf);
 
         double eb = static_cast<double>(qoi->get_geb());
 
@@ -224,18 +224,6 @@ public:
     }
 
 private:
-    std::unique_ptr<concepts::EBProvider<T>> create_eb_provider() {
-        if (qoi->id == 12) {
-            return std::make_unique<RegionalAvgInterpEBProvider<T, N>>(
-                static_cast<QoI_RegionalAvgInterp<T, N>*>(qoi.get()));
-        } else if (qoi->id == 13) {
-            return std::make_unique<RegionalMeanSqInterpEBProvider<T, N>>(
-                static_cast<QoI_RegionalMeanSqInterp<T, N>*>(qoi.get()));
-        } else {
-            throw std::runtime_error("QpetInterpDecomp: unsupported QoI id " + std::to_string(qoi->id));
-        }
-    }
-
     void init() {
         quant_index = 0;
         assert(blocksize % 2 == 0 && "Interpolation block size should be even numbers");
