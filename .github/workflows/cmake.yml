@@ -57,12 +57,36 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel 4
 
+      - name: Locate test binaries
+        run: |
+          echo "=== source dir ==="
+          pwd
+          ls -la test/bin/ 2>&1 || echo "(test/bin not found)"
+          echo "=== build tree ==="
+          find build/tools/test -type f -executable 2>/dev/null || true
+          echo "=== any test_qpet_* ==="
+          find build -name "test_qpet_*" -type f 2>/dev/null || true
+
       - name: Run QoI-related tests
         run: |
           TESTS="test_qpet_qoi test_qpet_eb_provider test_qpet_regional"
+          BIN_DIR=""
+          for d in test/bin build/tools/test build/tools/test/Release; do
+            if [ -x "$d/${TESTS%% *}" ]; then
+              BIN_DIR="$d"
+              break
+            fi
+          done
+          echo "Using BIN_DIR=$BIN_DIR"
           all_passed=0
           for t in $TESTS; do
-            if ./test/bin/$t; then
+            bin="$BIN_DIR/$t"
+            if [ ! -x "$bin" ]; then
+              echo "not found: $bin"
+              all_passed=1
+              continue
+            fi
+            if "$bin"; then
               echo "✓ $t passed"
             else
               echo "✗ $t FAILED"
