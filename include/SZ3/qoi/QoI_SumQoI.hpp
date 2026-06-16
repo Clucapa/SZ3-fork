@@ -17,7 +17,7 @@ public:
     QoI_SumQoI(std::vector<std::shared_ptr<concepts::QoIIf<T, N>>> funcs,
                double tol, T geb)
         : funcs_(std::move(funcs)), tol_(tol), geb_(geb) {
-        concepts::QoIIf<T, N>::id = -1;
+        concepts::QoIIf<T, N>::id = 0;
     }
 
     T interpret_eb(T x) const override {
@@ -47,8 +47,6 @@ public:
         return std::make_unique<PointwiseEBProvider<T>>(
             conf.ebs.data(), conf.ebs.size());
     }
-
-    bool is_pointwise() const override { return true; }
 
     T get_geb() const override { return geb_; }
     void set_geb(T eb) override { geb_ = eb; }

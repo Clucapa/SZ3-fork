@@ -120,24 +120,25 @@ std::shared_ptr<concepts::QoIIf<T, N>> assemble_from_nibbles(
 
 template <class T, uint N>
 std::shared_ptr<concepts::QoIIf<T, N>> GetQOI(const Config &conf) {
-    if (conf.qoi <= 0xD && conf.qoi >= 0) {
-        switch (conf.qoi) {
+    if (conf.qoi < 0) {
+        int rid = ~conf.qoi;
+        switch (rid) {
             case 0:
-                return std::make_shared<QoI_XLin<T, N>>(conf.qEB, conf.absErrorBound);
-            case 1:
-                return std::make_shared<QoI_X2<T, N>>(conf.qEB, conf.absErrorBound);
-            case 10:
                 return std::make_shared<QoI_RegionalMean<T, N>>(conf.qEB, conf.absErrorBound);
-            case 11:
+            case 1:
                 return std::make_shared<QoI_RegionalMeanSq<T, N>>(conf.qEB, conf.absErrorBound);
-            case 12:
+            case 2:
                 return std::make_shared<QoI_RegionalAvgInterp<T, N>>(conf.qEB, conf.absErrorBound);
-            case 13:
+            case 3:
                 return std::make_shared<QoI_RegionalMeanSqInterp<T, N>>(conf.qEB, conf.absErrorBound);
             default:
                 return nullptr;
         }
     }
+    if (conf.qoi == 0)
+        return std::make_shared<QoI_XLin<T, N>>(conf.qEB, conf.absErrorBound);
+    if (conf.qoi == 1)
+        return std::make_shared<QoI_X2<T, N>>(conf.qEB, conf.absErrorBound);
     return detail::assemble_from_nibbles<T, N>(conf);
 }
 

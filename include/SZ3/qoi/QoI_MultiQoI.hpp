@@ -15,7 +15,7 @@ class QoI_MultiQoI : public concepts::QoIIf<T, N> {
 public:
     QoI_MultiQoI(std::vector<std::shared_ptr<concepts::QoIIf<T, N>>> groups)
         : groups_(std::move(groups)) {
-        concepts::QoIIf<T, N>::id = -2;
+        concepts::QoIIf<T, N>::id = 0;
         if (!groups_.empty()) {
             tol_ = groups_[0]->get_tol();
             geb_ = groups_[0]->get_geb();

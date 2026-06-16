@@ -16,7 +16,7 @@ class QoI_RegionalAvgInterp : public concepts::QoIIf<T, N> {
 public:
     QoI_RegionalAvgInterp(double tol, T geb)
         : tol_(tol), geb_(geb) {
-        concepts::QoIIf<T, N>::id = 12;
+        concepts::QoIIf<T, N>::id = ~2;
     }
 
     T interpret_eb(T) const override {

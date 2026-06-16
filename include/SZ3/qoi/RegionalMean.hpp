@@ -17,7 +17,7 @@ class QoI_RegionalMean : public concepts::QoIIf<T, N> {
 public:
     QoI_RegionalMean(double tol, T geb)
         : tol_(tol), geb_(geb) {
-        concepts::QoIIf<T, N>::id = 10;
+        concepts::QoIIf<T, N>::id = ~0;
     }
 
     T interpret_eb(T) const override {

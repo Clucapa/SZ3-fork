@@ -26,8 +26,6 @@ public:
             conf.ebs.data(), conf.ebs.size());
     }
 
-    bool is_pointwise() const override { return true; }
-
     T get_geb() const override { return geb_; }
     void set_geb(T eb) override { geb_ = eb; }
     double get_tol() const override { return tol_; }

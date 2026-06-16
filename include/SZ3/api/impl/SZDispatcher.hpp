@@ -37,7 +37,7 @@ size_t SZ_compress_dispatcher(Config &conf, const T *data, uchar *cmpData, size_
             if (conf.cmprAlgo == ALGO_LORENZO_REG) {
                 cmpSize = SZ_compress_LorenzoReg<T, N>(conf, dataCopy.data(), cmpData, cmpCap);
             } else if (conf.cmprAlgo == ALGO_INTERP) {
-                if (conf.qoi >= 12) {
+                if (conf.qoi < 0) {
                     cmpSize = SZ_compress_Interp_qpet<T, N>(conf, dataCopy.data(), cmpData, cmpCap);
                 } else {
                     cmpSize = SZ_compress_Interp<T, N>(conf, dataCopy.data(), cmpData, cmpCap);
@@ -101,7 +101,7 @@ void SZ_decompress_dispatcher(Config &conf, const uchar *cmpData, size_t cmpSize
     } else if (conf.cmprAlgo == ALGO_LORENZO_REG) {
         SZ_decompress_LorenzoReg<T, N>(conf, cmpData, cmpSize, decData);
     } else if (conf.cmprAlgo == ALGO_INTERP) {
-        if (conf.qoi >= 12) {
+        if (conf.qoi < 0) {
             SZ_decompress_Interp_qpet<T, N>(conf, cmpData, cmpSize, decData);
         } else {
             SZ_decompress_Interp<T, N>(conf, cmpData, cmpSize, decData);

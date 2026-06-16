@@ -16,7 +16,7 @@ class QoI_RegionalMeanSqInterp : public concepts::QoIIf<T, N> {
 public:
     QoI_RegionalMeanSqInterp(double tol, T geb)
         : tol_(tol), geb_(geb) {
-        concepts::QoIIf<T, N>::id = 13;
+        concepts::QoIIf<T, N>::id = ~3;
     }
 
     T interpret_eb(T) const override {

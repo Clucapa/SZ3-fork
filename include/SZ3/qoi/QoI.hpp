@@ -47,7 +47,7 @@ public:
     virtual std::unique_ptr<EBProvider<T>> create_eb_provider(
         const Config &conf) = 0;
 
-    virtual bool is_pointwise() const { return false; }
+    virtual bool is_pointwise() const { return id >= 0; }
 
     int id = 0;
 };

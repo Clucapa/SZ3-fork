@@ -118,7 +118,20 @@ include/SZ3/decomposition/
 | `0x1F3` | XSquare AND XSqrt（两组 AND） |
 | `0x12F3F456` | Sum(1,2) AND 3 AND Sum(4,5,6) |
 
-legacy ID（0–13）继续走原工厂路径，向后兼容。编码值 > 0xD 自动进入 nibble 解析器。
+## ~ 翻转标记 Regional
+
+Regional QoI 有独立编号（0: RegionalMean, 1: RegionalMeanSq, 2: RegionalAvgInterp, 3: RegionalMeanSqInterp），使用时将编号做 `~` 翻转存入 `conf.qoi`。翻转后最高位为 1，工厂据此分流 regional/pointwise，无需额外 flag 字段。
+
+| 编号 | `conf.qoi` | QoI |
+|------|-----------|-----|
+| 0 | `~0` | RegionalMean（区间均值 budget tracking） |
+| 1 | `~1` | RegionalMeanSq（区间平方和 budget tracking） |
+| 2 | `~2` | RegionalAvgInterp（Interp 路径均值） |
+| 3 | `~3` | RegionalMeanSqInterp（Interp 路径平方和） |
+
+`is_pointwise()` 基类实现为 `return id >= 0;`，regional QoI 的 id 为负值（`~rid`），自动返回 false，无需子类逐个重写。
+
+legacy ID 0–1 继续走原工厂路径。其余正值自动进入 nibble 解析器。
 
 ## Interp 路径接入
 

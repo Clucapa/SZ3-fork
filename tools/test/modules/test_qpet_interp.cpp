@@ -18,7 +18,7 @@ using namespace SZ3;
 
 TEST(QoI_RegionalAvgInterp, ReturnsGeb) {
     QoI_RegionalAvgInterp<float, 1> qoi(0.01, 0.1f);
-    EXPECT_EQ(qoi.id, 12);
+    EXPECT_EQ(qoi.id, ~2);
     EXPECT_FLOAT_EQ(qoi.interpret_eb(42.0f), 0.1f);
     EXPECT_TRUE(qoi.check_comply(1.0f, 0.99f));
 }
@@ -31,7 +31,7 @@ TEST(QoI_RegionalAvgInterp, UpdateToleranceNoOp) {
 
 TEST(QoI_RegionalMeanSqInterp, ReturnsGeb) {
     QoI_RegionalMeanSqInterp<float, 1> qoi(1.0, 10.0f);
-    EXPECT_EQ(qoi.id, 13);
+    EXPECT_EQ(qoi.id, ~3);
     EXPECT_FLOAT_EQ(qoi.interpret_eb(3.0f), 10.0f);
 }
 
@@ -115,7 +115,7 @@ struct InterpTestConfig {
 };
 
 template <class T, uint N>
-Config make_interp_config(const InterpTestConfig<T, N> &tc, int qoi_id) {
+Config make_interp_config(const InterpTestConfig<T, N> &tc, int regional_id) {
     Config conf;
     conf.setDims(tc.dims.begin(), tc.dims.end());
     conf.cmprAlgo = ALGO_INTERP;
@@ -130,7 +130,7 @@ Config make_interp_config(const InterpTestConfig<T, N> &tc, int qoi_id) {
     conf.qEBase = tc.qEBase;
     conf.qELogB = tc.qELogB;
     conf.qR = tc.qR;
-    conf.qoi = qoi_id;
+    conf.qoi = ~regional_id;
     return conf;
 }
 
@@ -146,7 +146,7 @@ TEST(QpetInterpDecomp, CompressDecompress1D) {
     for (size_t i = 0; i < num; i++)
         data[i] = static_cast<float>(i % 7) * 0.5f;
 
-    auto conf = make_interp_config<float, N>(tc, 12);
+    auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
     auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
 
@@ -175,7 +175,7 @@ TEST(QpetInterpDecomp, CompressDecompress2D) {
     for (size_t i = 0; i < num; i++)
         data[i] = std::sin(static_cast<float>(i) * 0.1f);
 
-    auto conf = make_interp_config<float, N>(tc, 12);
+    auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
     auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
 
@@ -205,7 +205,7 @@ TEST(QpetInterpDecomp, CompressDecompress1DCubic) {
     for (size_t i = 0; i < num; i++)
         data[i] = std::sin(static_cast<float>(i) * 0.05f) * 10.0f;
 
-    auto conf = make_interp_config<float, N>(tc, 12);
+    auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
     auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
 
@@ -234,7 +234,7 @@ TEST(QpetInterpDecomp, CompressDecompressWithAnchor) {
     for (size_t i = 0; i < num; i++)
         data[i] = static_cast<float>(i % 13) * 0.7f;
 
-    auto conf = make_interp_config<float, N>(tc, 12);
+    auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
     auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
 
@@ -263,7 +263,7 @@ TEST(QpetInterpDecomp, AnchorPointsLossless) {
     for (size_t i = 0; i < num; i++)
         data[i] = 100.0f + static_cast<float>(i) * 50.0f;
 
-    auto conf = make_interp_config<float, N>(tc, 12);
+    auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
     auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
 
@@ -291,7 +291,7 @@ TEST(QpetInterpDecomp, ConsistentQebsQdsSize) {
         size_t num = dim;
         std::vector<float> data(num, 1.0f);
 
-        auto conf = make_interp_config<float, N>(tc, 12);
+        auto conf = make_interp_config<float, N>(tc, 2);
         auto qoi = GetQOI<float, N>(conf);
         auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
 
@@ -315,7 +315,7 @@ TEST(QpetInterpDecomp, QoIRegionalMeanSqInterpRoundTrip) {
     for (size_t i = 0; i < num; i++)
         data[i] = static_cast<float>(i % 5) * 0.3f + 1.0f;
 
-    auto conf = make_interp_config<float, N>(tc, 13);
+    auto conf = make_interp_config<float, N>(tc, 3);
     auto qoi = GetQOI<float, N>(conf);
     auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
 
@@ -338,7 +338,7 @@ TEST(QpetInterpDecomp, GetOutRange) {
     tc.dims = {16};
     tc.qEB = 0.1;
 
-    auto conf = make_interp_config<float, N>(tc, 12);
+    auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
     auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
 
