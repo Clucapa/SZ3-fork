@@ -164,9 +164,128 @@ commit message 末尾 `[关键字...]` 控制 CI：
 
 ## 编译与测试
 
+### 依赖
+
+- CMake ≥ 3.14
+- C++17 编译器
+- zstd (或使用内置版: `-DSZ3_USE_BUNDLED_ZSTD=ON`)
+- GTest（自动从 GitHub 拉取 v1.16.0，也可 `apt install libgtest-dev`）
+
+### 编译
+
 ```bash
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DSZ3_USE_BUNDLED_ZSTD=OFF
-make -j4
-../test/bin/sz3_qpet_test
+# 1. 配置
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DSZ3_USE_BUNDLED_ZSTD=OFF
+
+# 2. 编译（所有目标，包含测试）
+cmake --build build --parallel 4
+
+# 3. 测试二进制在 build/test/bin/ 下，例如：
+#    build/test/bin/test_qpet_qoi
+#    build/test/bin/test_qpet_composite
+#    等等
 ```
+
+注意：`tools/test/CMakeLists.txt` 会把 `tools/test/modules/` 下的每个 `.cpp` 自动生成一个独立测试可执行文件，所以测试文件名即为二进制名。
+
+### 运行测试
+
+```bash
+# 按需单个运行（替换 <name> 为文件名）
+./build/test/bin/<name>
+
+# 或者 git commit 时用 git hook 批量跑所有：
+TESTS="test_qpet_qoi test_qpet_eb_provider test_qpet_regional test_qpet_interp test_qpet_composite"
+for t in $TESTS; do
+    ./build/test/bin/$t || echo "FAIL: $t"
+done
+```
+
+### 测试覆盖清单
+
+| 测试文件 | 测试内容 |
+|----------|----------|
+| `test_qpet_qoi` | XLin / X2 的 `interpret_eb`、`check_comply`、`set_tol`/`set_geb` |
+| `test_qpet_eb_provider` | PointwiseEBProvider 的 `advance`（压缩/解压）、`reset`、`save/load`、`double` 类型 |
+| `test_qpet_regional` | RegionalMean / RegionalMeanSq 的 budget tracking、geb capping、负值对称性、无状态 save/load |
+| `test_qpet_interp` | QpetInterpDecomp 的 1D/2D round-trip、linear/cubic、anchor 无损、RegionalMeanSqInterp、qebs/qds 一致性 |
+| `test_qpet_composite` | 12 个基函数全覆盖（`eval` / `check_comply` / `interpret_eb` 各 1 case）；SumQoI、MultiQoI、MultiQoIEBProvider；nibble 解析器（单函数/Sum/AND/复杂编码/非法 nibble）；`create_eb_provider` 集成；**端到端**：X2 pointwise 与 RegionalMean 完整 compress→decompress→逐点/均值约束验证 |
+
+## 非测试的配置与调用
+
+### API 视角：如何启动 QPET
+
+QPET 的使用入口仍是 `SZ_compress_dispatcher`，只需要在 `Config` 中设置：
+
+```cpp
+#include "SZ3/api/SZ3.hpp"
+
+SZ3::Config conf;
+conf.setDims(dims.begin(), dims.end());
+conf.cmprAlgo  = SZ3::ALGO_LORENZO_REG;  // blockwise 预测（Lorenzo/Regression）
+// 或 conf.cmprAlgo = SZ3::ALGO_INTERP; // 插值预测
+
+// --- 选 QoI（三选一）---
+// 1) legacy 模式（不使用 QPET nibble/regional）
+conf.qoi = 0;   // XLin (f(x)=x)
+conf.qoi = 1;   // X2   (f(x)=x²)
+
+// 2) nibble 编码（点态组合）
+conf.qoi = 0x2;       // XCubic
+conf.qoi = 0x12;      // X2 + XCubic (组内 Sum)
+conf.qoi = 0x1F3;     // X2 AND XSqrt (两组 AND)
+
+// 3) regional（~翻转）
+conf.qoi = ~0;   // RegionalMean (blockwise budget tracking)
+conf.qoi = ~1;   // RegionalMeanSq
+conf.qoi = ~2;   // RegionalAvgInterp (interp 路径)
+conf.qoi = ~3;   // RegionalMeanSqInterp
+
+// --- QPET 量化参数 ---
+conf.qEB    = 0.01;   // 全局 eb（geb）
+conf.qEBase = 3.0;    // eb' 对数量化底数
+conf.qELogB = 0.2;    // eb' 量化 bins 参数
+conf.qR     = 12;      // eb' 量化 range
+conf.quantbinCnt = 65536;
+
+// 压缩
+sz_compress(&conf, data, cmpData, &cmpSize);
+// 解压
+sz_decompress(decData, cmpData, cmpSize);
+```
+
+### 基函数 Nibble 对照表
+
+| nibble | 类名 | f(x) |
+|--------|------|------|
+| `0x0` | QoI_XLin | x |
+| `0x1` | QoI_X2 | x² |
+| `0x2` | QoI_XCubic | x³ |
+| `0x3` | QoI_XSqrt | √x |
+| `0x4` | QoI_XExp | eˣ |
+| `0x5` | QoI_XLogX | x·log(x) |
+| `0x6` | QoI_LogX | log(x) |
+| `0x7` | QoI_XRecip | 1/x |
+| `0x8` | QoI_XAbs | \|x\| |
+| `0x9` | QoI_XSin | sin(x) |
+| `0xA` | QoI_XTanh | tanh(x) |
+| `0xB` | QoI_XPower | xⁿ (n 默认为 2) |
+| `0xF` | —— | 组分隔符 |
+
+### 组合 QoI 编码示例
+
+| conf.qoi | 含义 |
+|----------|------|
+| `0x1` | X² |
+| `0x12` | X² + X³（组内求和约束） |
+| `0x1F3` | X² AND √x（两组 AND） |
+| `0x12F3F456` | Sum(1,2) AND 3 AND Sum(4,5,6) |
+
+### Regional QoI 对照表
+
+| `conf.qoi` | 类名 | 含义 | 路径 |
+|------------|------|------|------|
+| `~0` | RegionalMean | 区间均值 budget tracking | blockwise |
+| `~1` | RegionalMeanSq | 区间平方和 budget tracking | blockwise |
+| `~2` | RegionalAvgInterp | 固定 geb | interp |
+| `~3` | RegionalMeanSqInterp | 固定 geb | interp |
