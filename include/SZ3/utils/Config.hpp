@@ -272,10 +272,8 @@ class Config {
                     qoi = std::stoi(value);
                 else if (eq(key, "qoiEB"))
                     qEB = std::stod(value);
-                else if (eq(key, "qoiEBBase"))
-                    qEBase = std::stod(value);
-                else if (eq(key, "qoiEBLogBase"))
-                    qELogB = std::stod(value);
+                else if (eq(key, "qoiParams"))
+                    qoiParams = value;
                 else if (eq(key, "qoiQuantbinCnt"))
                     qR = std::stoi(value);
             }
@@ -315,8 +313,7 @@ class Config {
         ss << "\n[QoISettings]\n";
         ss << "qoi = " << qoi << "\n";
         ss << "qoiEB = " << qEB << "\n";
-        ss << "qoiEBBase = " << qEBase << "\n";
-        ss << "qoiEBLogBase = " << qELogB << "\n";
+        ss << "qoiParams = " << qoiParams << "\n";
         ss << "qoiQuantbinCnt = " << qR << "\n";
 
         return ss.str();
@@ -369,9 +366,11 @@ class Config {
 
         write(qoi, c);
         write(qEB, c);
-        write(qEBase, c);
-        write(qELogB, c);
         write(qR, c);
+
+        uint32_t plen = static_cast<uint32_t>(qoiParams.size());
+        write(plen, c);
+        if (plen) write(qoiParams.data(), plen, c);
 
         auto confSize = static_cast<uchar>(c - c0);
         write(confSize, c0);  // write conf size at reserved space
@@ -442,13 +441,15 @@ class Config {
             read(qEB, c);
         }
         if (c < c1) {
-            read(qEBase, c);
-        }
-        if (c < c1) {
-            read(qELogB, c);
-        }
-        if (c < c1) {
             read(qR, c);
+        }
+        if (c < c1) {
+            uint32_t plen = 0;
+            read(plen, c);
+            if (plen && c + plen <= c1) {
+                qoiParams.assign(reinterpret_cast<const char*>(c), plen);
+                c += plen;
+            }
         }
     }
 
@@ -519,9 +520,8 @@ class Config {
 
     int qoi = 0;
     double qEB = 1.0;
-    double qEBase = 1e-15;
-    double qELogB = 2;
     int qR = 128;
+    std::string qoiParams;
     std::vector<double> ebs;
 };
 

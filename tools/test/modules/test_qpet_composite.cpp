@@ -460,7 +460,7 @@ TEST(NibbleParser, ComplexEncoding) {
 
 TEST(NibbleParser, UnknownNibbleThrows) {
     Config conf;
-    conf.qoi = 0x1E;  // E is reserved
+    conf.qoi = 0xC;  // 0xC is reserved
     auto f = [&]() { GetQOI<double, 1>(conf); };
     EXPECT_THROW(f(), std::invalid_argument);
 }
@@ -531,20 +531,36 @@ std::vector<double> generate_smooth_1d_data(size_t n) {
     return data;
 }
 
+std::string base64_encode(const void *data, size_t len) {
+    static const char tbl[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const auto *p = static_cast<const unsigned char *>(data);
+    std::string out;
+    out.reserve(((len + 2) / 3) * 4);
+    for (size_t i = 0; i < len; i += 3) {
+        unsigned b0 = p[i], b1 = (i + 1 < len) ? p[i + 1] : 0,
+                 b2 = (i + 2 < len) ? p[i + 2] : 0;
+        out += tbl[b0 >> 2];
+        out += tbl[((b0 & 3) << 4) | (b1 >> 4)];
+        size_t rem = len - i;
+        out += (rem > 1) ? tbl[((b1 & 0xF) << 2) | (b2 >> 6)] : '=';
+        out += (rem > 2) ? tbl[b2 & 0x3F] : '=';
+    }
+    return out;
+}
+
 }  // namespace
 
-TEST(EndToEnd, X2PointwiseCompressDecompress) {
+TEST(EndToEnd, ComposeSinOfSquareCompressDecompress) {
     constexpr uint N = 1;
     const size_t n = 64;
     auto data = generate_smooth_1d_data(n);
 
     Config conf(n);
-    conf.qEB = 1.0;
+    conf.qEB = 0.3;
     conf.absErrorBound = 0.5;
-    conf.qoi = 1;
+    conf.qoi = 0x19E;  // Compose(XSin, X2) = sin(x²) — bounded, no overflow
     conf.quantbinCnt = 65536;
-    conf.qEBase = 3.0;
-    conf.qELogB = 0.2;
     conf.qR = 12;
 
     auto qoi = GetQOI<double, N>(conf);
@@ -556,7 +572,97 @@ TEST(EndToEnd, X2PointwiseCompressDecompress) {
         conf.ebs[i] = qoi->interpret_eb(data[i]);
 
     LorenzoPredictor<double, N, 1> pred(conf.absErrorBound);
-    QpetQnt<double> qnt(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB,
+    QpetQnt<double> qnt(conf.quantbinCnt / 2, 3.0, 0.2,
+                        conf.qR, conf.absErrorBound);
+
+    QpetBlockDecomp<double, N, LorenzoPredictor<double, N, 1>,
+                     QpetQnt<double>>
+        decomp(conf, pred, qnt, qoi);
+
+    auto qis = decomp.compress(conf, data.data());
+    EXPECT_EQ(qis.size(), n * 2);
+
+    std::vector<double> dec(n, 0.0);
+    Config confDec = conf;
+    decomp.decompress(confDec, qis, dec.data());
+
+    size_t failures = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (!qoi->check_comply(data[i], dec[i])) failures++;
+    }
+    EXPECT_EQ(failures, 0u) << failures << " Compose(Sin,X2) violations";
+}
+
+TEST(EndToEnd, XLinParamCompressDecompress) {
+    constexpr uint N = 1;
+    const size_t n = 64;
+    auto data = generate_smooth_1d_data(n);
+
+    Config conf(n);
+    conf.qEB = 3.0;
+    conf.absErrorBound = 1.0;
+    conf.qoi = 0x0;
+    conf.quantbinCnt = 65536;
+    conf.qR = 12;
+
+    double A = 3.0, B = 1.0;
+    std::array<double, 2> p = {A, B};
+    conf.qoiParams = base64_encode(p.data(), sizeof(p));
+
+    auto qoi = GetQOI<double, N>(conf);
+    ASSERT_NE(qoi, nullptr);
+    ASSERT_TRUE(qoi->is_pointwise());
+
+    conf.ebs.resize(n);
+    for (size_t i = 0; i < n; i++)
+        conf.ebs[i] = qoi->interpret_eb(data[i]);
+
+    LorenzoPredictor<double, N, 1> pred(conf.absErrorBound);
+    QpetQnt<double> qnt(conf.quantbinCnt / 2, 3.0, 0.2,
+                        conf.qR, conf.absErrorBound);
+
+    QpetBlockDecomp<double, N, LorenzoPredictor<double, N, 1>,
+                     QpetQnt<double>>
+        decomp(conf, pred, qnt, qoi);
+
+    auto qis = decomp.compress(conf, data.data());
+    EXPECT_EQ(qis.size(), n * 2);
+
+    std::vector<double> dec(n, 0.0);
+    Config confDec = conf;
+    decomp.decompress(confDec, qis, dec.data());
+
+    size_t failures = 0;
+    for (size_t i = 0; i < n; i++) {
+        double f_orig = A * data[i] + B;
+        double f_dec = A * dec[i] + B;
+        if (std::fabs(f_orig - f_dec) > conf.qEB) failures++;
+    }
+    EXPECT_EQ(failures, 0u) << failures << " XLin(" << A << "x+" << B << ") violations";
+}
+
+TEST(EndToEnd, X2PointwiseCompressDecompress) {
+    constexpr uint N = 1;
+    const size_t n = 64;
+    auto data = generate_smooth_1d_data(n);
+
+    Config conf(n);
+    conf.qEB = 1.0;
+    conf.absErrorBound = 0.5;
+    conf.qoi = 1;
+    conf.quantbinCnt = 65536;
+    conf.qR = 12;
+
+    auto qoi = GetQOI<double, N>(conf);
+    ASSERT_NE(qoi, nullptr);
+    ASSERT_TRUE(qoi->is_pointwise());
+
+    conf.ebs.resize(n);
+    for (size_t i = 0; i < n; i++)
+        conf.ebs[i] = qoi->interpret_eb(data[i]);
+
+    LorenzoPredictor<double, N, 1> pred(conf.absErrorBound);
+    QpetQnt<double> qnt(conf.quantbinCnt / 2, 3.0, 0.2,
                         conf.qR, conf.absErrorBound);
 
     QpetBlockDecomp<double, N, LorenzoPredictor<double, N, 1>,
@@ -587,8 +693,6 @@ TEST(EndToEnd, RegionalMeanCompressDecompress) {
     conf.absErrorBound = 1.0;
     conf.qoi = ~0;
     conf.quantbinCnt = 65536;
-    conf.qEBase = 3.0;
-    conf.qELogB = 0.2;
     conf.qR = 12;
 
     auto qoi = GetQOI<double, N>(conf);
@@ -596,7 +700,7 @@ TEST(EndToEnd, RegionalMeanCompressDecompress) {
     ASSERT_FALSE(qoi->is_pointwise());
 
     LorenzoPredictor<double, N, 1> pred(conf.absErrorBound);
-    QpetQnt<double> qnt(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB,
+    QpetQnt<double> qnt(conf.quantbinCnt / 2, 3.0, 0.2,
                         conf.qR, conf.absErrorBound);
 
     QpetBlockDecomp<double, N, LorenzoPredictor<double, N, 1>,
@@ -617,4 +721,191 @@ TEST(EndToEnd, RegionalMeanCompressDecompress) {
     double mean_err = std::fabs(sum_err) / n;
     EXPECT_LE(mean_err, conf.absErrorBound)
         << "mean error " << mean_err << " exceeds tolerance " << conf.absErrorBound;
+}
+
+// ---- QoI_Compose tests ----
+
+TEST(Compose, Eval) {
+    auto f = std::make_shared<QoI_X2<double, 1>>(0.1, 10.0);
+    auto g = std::make_shared<QoI_XLin<double, 1>>(0.1, 10.0);
+    QoI_Compose<double, 1> comp(f, g, 0.1, 10.0);
+
+    EXPECT_DOUBLE_EQ(comp.eval(3.0), 9.0);
+    EXPECT_DOUBLE_EQ(comp.eval(0.0), 0.0);
+}
+
+TEST(Compose, CheckComply) {
+    auto f = std::make_shared<QoI_X2<double, 1>>(0.1, 10.0);
+    auto g = std::make_shared<QoI_XLin<double, 1>>(0.1, 10.0);
+    QoI_Compose<double, 1> comp(f, g, 0.1, 10.0);
+
+    EXPECT_TRUE(comp.check_comply(2.0, 2.001));
+    EXPECT_FALSE(comp.check_comply(2.0, 4.0));
+}
+
+TEST(Compose, InterpretEBReturnsBounded) {
+    auto f = std::make_shared<QoI_X2<double, 1>>(0.5, 100.0);
+    auto g = std::make_shared<QoI_XCubic<double, 1>>(0.5, 100.0);
+    QoI_Compose<double, 1> comp(f, g, 0.5, 100.0);
+
+    double eb = comp.interpret_eb(2.0);
+    EXPECT_GE(eb, 0.0);
+    EXPECT_LE(eb, 100.0);
+
+    double eb0 = comp.interpret_eb(0.0);
+    EXPECT_GE(eb0, 0.0);
+    EXPECT_LE(eb0, 100.0);
+}
+
+TEST(Compose, ComposeAbsThenSqrt) {
+    auto f = std::make_shared<QoI_XSqrt<double, 1>>(0.1, 100.0);
+    auto g = std::make_shared<QoI_XAbs<double, 1>>(0.1, 100.0);
+    QoI_Compose<double, 1> comp(f, g, 0.1, 100.0);
+
+    EXPECT_DOUBLE_EQ(comp.eval(-4.0), 2.0);  // sqrt(|-4|) = 2
+    double eb = comp.interpret_eb(4.0);
+    EXPECT_GE(eb, 0.0);
+}
+
+// ---- XLin identity elision ----
+
+TEST(ComposeElision, InnerXLinIdentity) {
+    auto f = std::make_shared<QoI_X2<double, 1>>(0.1, 10.0);
+    auto g = std::make_shared<QoI_XLin<double, 1>>(0.1, 10.0, 1.0, 0.0);
+    auto res = detail::make_compose<double, 1>(f, g, 0.1, 10.0);
+
+    EXPECT_DOUBLE_EQ(res->eval(3.0), 9.0);
+    EXPECT_EQ(res->id, 1);  // should be X2, not 0xE (Compose)
+}
+
+TEST(ComposeElision, OuterXLinIdentity) {
+    auto f = std::make_shared<QoI_XLin<double, 1>>(0.1, 10.0, 1.0, 0.0);
+    auto g = std::make_shared<QoI_X2<double, 1>>(0.1, 10.0);
+    auto res = detail::make_compose<double, 1>(f, g, 0.1, 10.0);
+
+    EXPECT_DOUBLE_EQ(res->eval(3.0), 9.0);  // XLin(X2(x)) = X2
+    EXPECT_EQ(res->id, 1);
+}
+
+TEST(ComposeElision, NoEelideForAffine) {
+    auto f = std::make_shared<QoI_X2<double, 1>>(0.1, 10.0);
+    auto g = std::make_shared<QoI_XLin<double, 1>>(0.1, 10.0, 2.0, 1.0);
+    auto res = detail::make_compose<double, 1>(f, g, 0.1, 10.0);
+
+    EXPECT_EQ(res->id, 0xE);  // not elided → stays Compose
+    EXPECT_NEAR(res->eval(3.0), 49.0, 1e-9);  // (2*3+1)² = 49
+}
+
+// ---- E nibble parsing ----
+
+TEST(NibbleParser, ComposeSingleE) {
+    Config conf(10);
+    conf.qEB = 0.5;
+    conf.absErrorBound = 10.0;
+    conf.ebs.resize(10, 0.1);
+    conf.qoi = 0x14E;  // Compose(XExp, X2) = e^(x²)
+    auto qoi = GetQOI<double, 1>(conf);
+    ASSERT_NE(qoi, nullptr);
+    EXPECT_EQ(qoi->id, 0xE);
+    EXPECT_DOUBLE_EQ(qoi->eval(0.0), 1.0);  // e^0 = 1
+}
+
+TEST(NibbleParser, ComposeNested) {
+    Config conf(10);
+    conf.qEB = 1.0;
+    conf.absErrorBound = 100.0;
+    conf.ebs.resize(10, 0.5);
+    conf.qoi = 0x34E;  // Compose(XExp, XSqrt) = e^√x
+    auto qoi = GetQOI<double, 1>(conf);
+    ASSERT_NE(qoi, nullptr);
+    EXPECT_EQ(qoi->id, 0xE);
+    EXPECT_DOUBLE_EQ(qoi->eval(0.0), 1.0);  // e^0 = 1
+}
+
+TEST(NibbleParser, ComposeInMultiGroup) {
+    Config conf(10);
+    conf.qEB = 1.0;
+    conf.absErrorBound = 100.0;
+    conf.ebs.resize(10, 0.5);
+    conf.qoi = 0x14EF3;  // XSqrt AND Compose(XExp, X2)
+    auto qoi = GetQOI<double, 1>(conf);
+    ASSERT_NE(qoi, nullptr);
+    double eb = qoi->interpret_eb(2.0);
+    EXPECT_GT(eb, 0.0);
+    EXPECT_LE(eb, 100.0);
+}
+
+// ---- Param tests ----
+
+TEST(Param, XLinDefaultNoParams) {
+    Config conf(10);
+    conf.qEB = 0.1;
+    conf.absErrorBound = 1.0;
+    conf.ebs.resize(10, 0.1);
+    conf.qoi = 0x0;
+    auto qoi = GetQOI<double, 1>(conf);
+    ASSERT_NE(qoi, nullptr);
+    EXPECT_DOUBLE_EQ(qoi->eval(3.0), 3.0);  // identity
+}
+
+TEST(Param, XLinCustomParams) {
+    double a = 2.0, b = 1.5;
+    std::vector<unsigned char> raw(sizeof(double) * 2);
+    std::memcpy(raw.data(), &a, sizeof(double));
+    std::memcpy(raw.data() + sizeof(double), &b, sizeof(double));
+
+    detail::ParamReader reader(raw);
+    double ra = reader.read();
+    double rb = reader.read();
+    EXPECT_DOUBLE_EQ(ra, 2.0);
+    EXPECT_DOUBLE_EQ(rb, 1.5);
+
+    detail::ParamReader reader2(raw);
+    auto qoi = detail::make_base_qoi<double, 1>(0, reader2, 0.1, 10.0);
+    EXPECT_DOUBLE_EQ(qoi->eval(3.0), 2.0 * 3.0 + 1.5);
+}
+
+TEST(Param, XExpDefaultBase) {
+    Config conf(10);
+    conf.qEB = 0.1;
+    conf.absErrorBound = 10.0;
+    conf.ebs.resize(10, 0.1);
+    conf.qoi = 0x4;
+    auto qoi = GetQOI<double, 1>(conf);
+    ASSERT_NE(qoi, nullptr);
+    EXPECT_DOUBLE_EQ(qoi->eval(0.0), 1.0);  // e^0 = 1
+}
+
+TEST(Param, XExpCustomBase) {
+    Config conf(10);
+    conf.qEB = 0.1;
+    conf.absErrorBound = 10.0;
+    conf.ebs.resize(10, 0.1);
+    conf.qoi = 0x4;
+
+    double base = 10.0;
+    std::vector<unsigned char> raw(sizeof(double));
+    std::memcpy(raw.data(), &base, sizeof(double));
+    conf.qoiParams = " ";
+
+    detail::ParamReader reader(raw);
+    auto qoi = detail::make_base_qoi<double, 1>(0x4, reader, conf.qEB, conf.absErrorBound);
+
+    EXPECT_DOUBLE_EQ(qoi->eval(0.0), 1.0);
+    EXPECT_DOUBLE_EQ(qoi->eval(1.0), 10.0);
+}
+
+TEST(Param, Base64DecodeRoundtrip) {
+    double p1 = 3.14, p2 = 2.718;
+    std::vector<unsigned char> raw(sizeof(double) * 2);
+    std::memcpy(raw.data(), &p1, sizeof(double));
+    std::memcpy(raw.data() + sizeof(double), &p2, sizeof(double));
+
+    auto decoded = detail::base64_decode("");
+    EXPECT_TRUE(decoded.empty());
+
+    detail::ParamReader reader(raw);
+    EXPECT_DOUBLE_EQ(reader.read(), p1);
+    EXPECT_DOUBLE_EQ(reader.read(), p2);
+    EXPECT_TRUE(std::isnan(reader.read()));
 }

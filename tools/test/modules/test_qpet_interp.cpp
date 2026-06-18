@@ -109,8 +109,6 @@ struct InterpTestConfig {
     double interpBeta = -1;
     int quantbinCnt = 65536;
     double qEB = 0.01;
-    double qEBase = 3.0;
-    double qELogB = 0.2;
     int qR = 12;
 };
 
@@ -127,8 +125,6 @@ Config make_interp_config(const InterpTestConfig<T, N> &tc, int regional_id) {
     conf.quantbinCnt = tc.quantbinCnt;
     conf.absErrorBound = tc.qEB;
     conf.qEB = tc.qEB;
-    conf.qEBase = tc.qEBase;
-    conf.qELogB = tc.qELogB;
     conf.qR = tc.qR;
     conf.qoi = ~regional_id;
     return conf;
@@ -148,7 +144,7 @@ TEST(QpetInterpDecomp, CompressDecompress1D) {
 
     auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
-    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
+    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, 3.0, 0.2, conf.qR, conf.absErrorBound);
 
     QpetInterpDecomp<float, N, QpetQnt<float>> decomp(conf, qnt, qoi);
     auto qis = decomp.compress(conf, data.data());
@@ -177,7 +173,7 @@ TEST(QpetInterpDecomp, CompressDecompress2D) {
 
     auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
-    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
+    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, 3.0, 0.2, conf.qR, conf.absErrorBound);
 
     QpetInterpDecomp<float, N, QpetQnt<float>> decomp(conf, qnt, qoi);
     auto qis = decomp.compress(conf, data.data());
@@ -207,7 +203,7 @@ TEST(QpetInterpDecomp, CompressDecompress1DCubic) {
 
     auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
-    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
+    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, 3.0, 0.2, conf.qR, conf.absErrorBound);
 
     QpetInterpDecomp<float, N, QpetQnt<float>> decomp(conf, qnt, qoi);
     auto qis = decomp.compress(conf, data.data());
@@ -236,7 +232,7 @@ TEST(QpetInterpDecomp, CompressDecompressWithAnchor) {
 
     auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
-    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
+    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, 3.0, 0.2, conf.qR, conf.absErrorBound);
 
     QpetInterpDecomp<float, N, QpetQnt<float>> decomp(conf, qnt, qoi);
     auto qis = decomp.compress(conf, data.data());
@@ -265,7 +261,7 @@ TEST(QpetInterpDecomp, AnchorPointsLossless) {
 
     auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
-    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
+    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, 3.0, 0.2, conf.qR, conf.absErrorBound);
 
     QpetInterpDecomp<float, N, QpetQnt<float>> decomp(conf, qnt, qoi);
     auto qis = decomp.compress(conf, data.data());
@@ -293,7 +289,7 @@ TEST(QpetInterpDecomp, ConsistentQebsQdsSize) {
 
         auto conf = make_interp_config<float, N>(tc, 2);
         auto qoi = GetQOI<float, N>(conf);
-        auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
+        auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, 3.0, 0.2, conf.qR, conf.absErrorBound);
 
         QpetInterpDecomp<float, N, QpetQnt<float>> decomp(conf, qnt, qoi);
         auto qis = decomp.compress(conf, data.data());
@@ -317,7 +313,7 @@ TEST(QpetInterpDecomp, QoIRegionalMeanSqInterpRoundTrip) {
 
     auto conf = make_interp_config<float, N>(tc, 3);
     auto qoi = GetQOI<float, N>(conf);
-    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
+    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, 3.0, 0.2, conf.qR, conf.absErrorBound);
 
     QpetInterpDecomp<float, N, QpetQnt<float>> decomp(conf, qnt, qoi);
     auto qis = decomp.compress(conf, data.data());
@@ -340,7 +336,7 @@ TEST(QpetInterpDecomp, GetOutRange) {
 
     auto conf = make_interp_config<float, N>(tc, 2);
     auto qoi = GetQOI<float, N>(conf);
-    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB, conf.qR, conf.absErrorBound);
+    auto qnt = QpetQnt<float>(conf.quantbinCnt / 2, 3.0, 0.2, conf.qR, conf.absErrorBound);
 
     QpetInterpDecomp<float, N, QpetQnt<float>> decomp(conf, qnt, qoi);
     auto range = decomp.get_out_range();

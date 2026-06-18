@@ -11,13 +11,13 @@ namespace SZ3 {
 template <class T, uint N>
 class QoI_XExp : public concepts::QoIIf<T, N> {
 public:
-    QoI_XExp(double tol, T geb)
-        : tol_(tol), geb_(geb) {
+    QoI_XExp(double tol, T geb, double base = std::exp(1.0))
+        : tol_(tol), geb_(geb), base_(base) {
         concepts::QoIIf<T, N>::id = 4;
     }
 
     double eval(T val) const override {
-        return std::exp(static_cast<double>(val));
+        return std::pow(base_, static_cast<double>(val));
     }
 
     std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
@@ -34,6 +34,7 @@ public:
 private:
     double tol_;
     T geb_;
+    double base_;
 };
 
 }  // namespace SZ3

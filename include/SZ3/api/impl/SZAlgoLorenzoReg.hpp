@@ -26,7 +26,7 @@ size_t SZ_compress_LorenzoReg(Config &conf, T *data, uchar *cmpData, size_t cmpC
     calAbsErrorBound(conf, data);
 
     auto qoi     = GetQOI<T, N>(conf);
-    auto qnt     = QpetQnt<T>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB,
+    auto qnt     = QpetQnt<T>(conf.quantbinCnt / 2, 1e-15, 2,
                                conf.qR, conf.absErrorBound);
     auto encoder = HuffmanEncoder<int>();
     auto lossless = Lossless_zstd();
@@ -69,7 +69,7 @@ void SZ_decompress_LorenzoReg(const Config &conf, const uchar *cmpData,
     assert(conf.cmprAlgo == ALGO_LORENZO_REG);
 
     auto qoi     = GetQOI<T, N>(conf);
-    auto qnt     = QpetQnt<T>(conf.quantbinCnt / 2, conf.qEBase, conf.qELogB,
+    auto qnt     = QpetQnt<T>(conf.quantbinCnt / 2, 1e-15, 2,
                                conf.qR, conf.absErrorBound);
     auto encoder = HuffmanEncoder<int>();
     auto lossless = Lossless_zstd();

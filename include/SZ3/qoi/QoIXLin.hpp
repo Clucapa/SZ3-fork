@@ -11,22 +11,26 @@ namespace SZ3 {
 template <class T, uint N>
 class QoI_XLin : public concepts::QoIIf<T, N> {
 public:
-    QoI_XLin(double tol, T geb)
-        : tol(tol), geb(geb) {
+    QoI_XLin(double tol, T geb, double A = 1.0, double B = 0.0)
+        : tol(tol), geb(geb), A_(A), B_(B) {
         concepts::QoIIf<T, N>::id = 0;
     }
 
     T interpret_eb(T) const override {
-        return std::min(static_cast<T>(tol), geb);
+        if (A_ == 0.0) return geb;
+        return std::min(static_cast<T>(tol / std::fabs(A_)), geb);
     }
 
     bool check_comply(T orig, T dec) const override {
-        return fabs(orig - dec) <= tol;
+        return fabs(eval(orig) - eval(dec)) <= tol;
     }
 
     double eval(T val) const override {
-        return static_cast<double>(val);
+        return A_ * static_cast<double>(val) + B_;
     }
+
+    double A() const { return A_; }
+    double B() const { return B_; }
 
     std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
             const Config &conf) override {
@@ -42,6 +46,8 @@ public:
 private:
     double tol;
     T geb;
+    double A_;
+    double B_;
 };
 
 }  // namespace SZ3
