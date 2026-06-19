@@ -1,5 +1,5 @@
-// Shared test runner functions — qoi matrix and encoder roundtrip.
-// Included by e2e_main.cpp.
+// Shared test runners — qoi matrix and encoder roundtrip.
+// Included by e2e_main.cpp only.
 
 #ifndef SZ3_TEST_RUN_TESTS_HPP
 #define SZ3_TEST_RUN_TESTS_HPP
@@ -20,9 +20,11 @@
 
 using namespace sz3_test;
 
+// Data patterns used in the test matrix loop.
 static const int ALL_PATTERNS[] = {D1_RAMP, D2_WIDE, D3_SINUSOID, D4_CLIFF,
                                     D5_ZEROCROSS, D6_EXP, D7_CONST, D8_RANDWALK};
 
+// Dispatch to the correct generator by pattern and dimension.
 static std::vector<double> generate_data(int pat, uint N, size_t, const std::array<size_t,3> &dims) {
     switch (N) {
     case 1: switch (pat) {
@@ -47,6 +49,7 @@ static std::vector<double> generate_data(int pat, uint N, size_t, const std::arr
     return {};
 }
 
+// Quick domain check: skip test if generated data violates QOI's input range.
 static bool data_ok_for_qoi_domain(QoiDomain domain, const double *data, size_t n) {
     for (size_t i = 0; i < n; ++i) {
         double v = data[i];
@@ -60,17 +63,26 @@ static bool data_ok_for_qoi_domain(QoiDomain domain, const double *data, size_t 
     return true;
 }
 
+// Defined in e2e_main.cpp.
 extern std::string g_encoder_path;
 extern bool call_encoder(const std::string &expr, int &qoi_out,
                           std::string &params_out, std::string &error_out);
 
+// ============================================================================
+//  QOI matrix test — verify one QOI × pattern × algo combination.
+//  Uses hardcoded feval from QoiDef for verification.
+// ============================================================================
 static TestResult run_qoi_test(const QoiDef &qd, uint N, int algo, uint8_t ia,
                                 int pat, std::array<size_t,3> dims) {
     using namespace SZ3;
     TestResult r; size_t num = dims[0]; if (N>=2) num*=dims[1]; if (N>=3) num*=dims[2];
+
     auto data = generate_data(pat, N, num, dims);
     if (!sz3_test::data_ok_for_qoi(qd, data)) { r.fail_reason = "skip-domain"; return r; }
+
     auto conf = make_config(qd, N, algo, ia, dims);
+
+    // Skip if the hardcoded feval overflows on this data.
     if (qd.feval) {
         bool overflow = false;
         for (size_t i : {size_t(0),num/4,num/2,3*num/4,num-1})
@@ -79,38 +91,52 @@ static TestResult run_qoi_test(const QoiDef &qd, uint N, int algo, uint8_t ia,
             if (i<num && !std::isfinite(qd.feval2(data[i]))) { overflow=true; break; }
         if (overflow) { r.fail_reason = "skip-overflow"; return r; }
     }
-    size_t cmpSize = 0;
-    double *dec = roundtrip_compress(conf, data.data(), num, cmpSize, r);
+
+    size_t cmpSize_unused = 0;
+    double *dec = roundtrip_compress(conf, data.data(), num, cmpSize_unused, r);
     if (!dec) return r;
+
     if (qd.is_regional) {
+        // Regional: hardcoded aggregate constraint (mean or mean-of-squares).
         double agg=0;
         if (!check_regional_aggregate(qd,num,data.data(),dec,&agg))
             { r.passed=false; r.fail_reason="qoi-regional"; r.max_abs=max_abs_err(data.data(),dec,num); r.max_qoi=agg; }
         else { r.max_abs=max_abs_err(data.data(),dec,num); r.max_qoi=agg; }
     } else {
+        // Pointwise: per-point hardcoded f(x) check.
         size_t fails=0;
         if (!check_hardcoded_comply(qd.feval,qd.qEB,data.data(),dec,num,&fails))
-            { r.passed=false; r.fail_reason="qoi-violation"; r.qoi_fails=fails; r.max_abs=max_abs_err(data.data(),dec,num); r.max_qoi=max_hardcoded_qoi(qd.feval,data.data(),dec,num); }
+            { r.passed=false; r.fail_reason="qoi-violation"; r.qoi_fails=fails;
+              r.max_abs=max_abs_err(data.data(),dec,num); r.max_qoi=max_hardcoded_qoi(qd.feval,data.data(),dec,num); }
         else { r.max_abs=max_abs_err(data.data(),dec,num); r.max_qoi=max_hardcoded_qoi(qd.feval,data.data(),dec,num); }
+        // MultiQoI second group check.
         if (r.passed && qd.feval2 && !check_hardcoded_comply(qd.feval2,qd.qEB2,data.data(),dec,num,&fails))
             { r.passed=false; r.fail_reason="qoi-violation"; r.qoi_fails=fails; r.max_qoi2=max_hardcoded_qoi(qd.feval2,data.data(),dec,num); }
     }
+
     delete[] dec; return r;
 }
 
+// ============================================================================
+//  Encoder roundtrip test — expression → external encoder → compress → verify.
+//  Uses hardcoded feval from EncoderTestCase for verification.
+// ============================================================================
 static TestResult run_encoder_test(const EncoderTestCase &tc, uint N, int algo,
                                     uint8_t ia, int pat, std::array<size_t,3> dims) {
     using namespace SZ3;
     TestResult r; size_t num = dims[0]; if (N>=2) num*=dims[1]; if (N>=3) num*=dims[2];
+
     auto data = generate_data(pat, N, num, dims);
     if (!data_ok_for_qoi_domain(tc.domain, data.data(), num)) { r.fail_reason = "skip-domain"; return r; }
 
-    int qoi_val = 0; std::string qoi_params; std::string expr_str(tc.expr);
+    // Call external encoder binary to get qoi + qoiParams.
+    int qoi_val = 0; std::string qoi_params;
     if (g_encoder_path.empty()) { r.fail_reason = "skip-no-encoder"; return r; }
     std::string err;
-    if (!call_encoder(expr_str, qoi_val, qoi_params, err))
+    if (!call_encoder(tc.expr, qoi_val, qoi_params, err))
         { r.passed=false; r.fail_reason="encoder-error"; r.detail=err; return r; }
 
+    // Build Config from encoder output and test case parameters.
     Config conf(num); conf.setDims(dims.begin(), dims.begin()+N);
     conf.qoi = qoi_val; conf.qoiParams = qoi_params;
     conf.qEB = tc.qEB; conf.absErrorBound = tc.absErrorBound; conf.quantbinCnt = 65536; conf.qR = 32;
@@ -121,19 +147,23 @@ static TestResult run_encoder_test(const EncoderTestCase &tc, uint N, int algo,
     }
     if (algo==TALGO_INTERP||algo==TALGO_INTERP_LORENZO) conf.interpAlgo=ia;
 
+    // Skip if the hardcoded feval overflows on this data.
     bool overflow=false;
     for (size_t i : {size_t(0),num/4,num/2,3*num/4,num-1})
         if (i<num && !std::isfinite(tc.feval(data[i]))) { overflow=true; break; }
     if (overflow) { r.fail_reason="skip-overflow"; return r; }
 
-    size_t cmpSize=0;
-    double *dec = roundtrip_compress(conf, data.data(), num, cmpSize, r);
+    size_t cmpSize_unused = 0;
+    double *dec = roundtrip_compress(conf, data.data(), num, cmpSize_unused, r);
     if (!dec) return r;
 
+    // Per-point hardcoded f(x) check.
     size_t fails=0;
     if (!check_hardcoded_comply(tc.feval,tc.qEB,data.data(),dec,num,&fails))
-        { r.passed=false; r.fail_reason="qoi-violation"; r.qoi_fails=fails; r.max_abs=max_abs_err(data.data(),dec,num); r.max_qoi=max_hardcoded_qoi(tc.feval,data.data(),dec,num); }
+        { r.passed=false; r.fail_reason="qoi-violation"; r.qoi_fails=fails;
+          r.max_abs=max_abs_err(data.data(),dec,num); r.max_qoi=max_hardcoded_qoi(tc.feval,data.data(),dec,num); }
     else { r.max_abs=max_abs_err(data.data(),dec,num); r.max_qoi=max_hardcoded_qoi(tc.feval,data.data(),dec,num); }
+    // MultiQoI second group check.
     if (tc.feval2 && r.passed && !check_hardcoded_comply(tc.feval2,tc.qEB2,data.data(),dec,num,&fails))
         { r.passed=false; r.fail_reason="qoi-violation"; r.qoi_fails=fails; r.max_qoi2=max_hardcoded_qoi(tc.feval2,data.data(),dec,num); }
 
