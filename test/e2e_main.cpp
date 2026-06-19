@@ -186,10 +186,18 @@ static TestResult run_encoder_test(const EncoderTestCase &tc, uint N, int algo,
     }
 
     // Build Config using encoder output.
+    auto er = qoi_encode::encode(tc.expr);
+    if (!er.ok) {
+        r.passed = false;
+        r.fail_reason = "encoder-error";
+        r.detail = er.error;
+        return r;
+    }
+
     Config conf(num);
     conf.setDims(dims.begin(), dims.begin() + N);
-    conf.qoi = tc.qoi;
-    conf.qoiParams = tc.qoiParams;
+    conf.qoi = er.qoi;
+    conf.qoiParams = er.qoiParams;
     conf.qEB = tc.qEB;
     conf.absErrorBound = tc.absErrorBound;
     conf.quantbinCnt = 65536;
