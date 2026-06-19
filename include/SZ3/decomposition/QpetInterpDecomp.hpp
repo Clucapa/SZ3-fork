@@ -62,7 +62,7 @@ public:
             T eb_val = qoi->interpret_eb(orig_val);
             int qe = qnt.qnt_eb(eb_val);
             int qd = qnt.qnt_overwrite(*data, static_cast<T>(0), eb_val);
-            if (!qoi->check_comply(orig_val, *data)) {
+            if (eb_val < 1e-13 || !qoi->check_comply(orig_val, *data)) {
                 *data = orig_val;
                 qe = qnt.qnt_eb(eb_val = static_cast<T>(0));
                 if (qd != 0) {
@@ -102,7 +102,7 @@ public:
                 T point_eb = std::min(eb_raw, static_cast<T>(cur_eb));
                 int qe = qnt.qnt_eb(point_eb);
                 int qd = qnt.qnt_overwrite(d, pred, point_eb);
-                if (!qoi->check_comply(orig_val, d)) {
+                if (point_eb < 1e-13 || !qoi->check_comply(orig_val, d)) {
                     d = orig_val;
                     qe = qnt.qnt_eb(point_eb = static_cast<T>(0));
                     if (qd != 0) {

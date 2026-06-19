@@ -55,7 +55,7 @@ public:
                 qebs.push_back(qe);
                 qds.push_back(qd);
 
-                if (!qoi->check_comply(ori, *c)) {
+                if (eb < 1e-13 || !qoi->check_comply(ori, *c)) {
                     *c = ori;
                     qebs.back() = qnt.qnt_eb(eb = static_cast<T>(0));
                     if (qd != 0) {

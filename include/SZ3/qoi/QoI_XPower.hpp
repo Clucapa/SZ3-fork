@@ -20,6 +20,25 @@ public:
         return std::pow(std::fabs(static_cast<double>(val)), expo_);
     }
 
+    T interpret_eb(T x) const override {
+        double d = static_cast<double>(x);
+        double p = std::pow(std::fabs(d), expo_);
+        T eb = geb_;
+        double intpart; double frac = std::modf(expo_, &intpart);
+        if (frac == 0.0) {
+            int n = static_cast<int>(intpart);
+            if (n % 2 == 0) {
+                eb = static_cast<T>(std::pow(p + tol_, 1.0 / n) - std::fabs(d));
+            } else {
+                eb = static_cast<T>(std::pow(p + tol_, 1.0 / n) - std::fabs(d));
+            }
+        } else {
+            eb = static_cast<T>(std::pow(p + tol_, 1.0 / expo_) - std::fabs(d));
+        }
+        if (!std::isfinite(eb)) eb = geb_;
+        return std::min(eb, geb_);
+    }
+
     std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
             const Config &conf) override {
         return std::make_unique<PointwiseEBProvider<T>>(

@@ -20,6 +20,11 @@ public:
         return std::sin(static_cast<double>(val));
     }
 
+    T interpret_eb(T x) const override {
+        if (tol_ >= 2.0) return geb_;
+        return std::min(static_cast<T>(tol_), geb_);
+    }
+
     std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
             const Config &conf) override {
         return std::make_unique<PointwiseEBProvider<T>>(

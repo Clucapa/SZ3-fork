@@ -20,6 +20,19 @@ public:
         return std::tanh(static_cast<double>(val));
     }
 
+    T interpret_eb(T x) const override {
+        double t = std::tanh(static_cast<double>(x));
+        T eb = geb_;
+        if (t >= 0.0) {
+            if (t - tol_ > -1.0)
+                eb = static_cast<T>(static_cast<double>(x) - std::atanh(t - tol_));
+        } else {
+            if (t + tol_ < 1.0)
+                eb = static_cast<T>(std::atanh(t + tol_) - static_cast<double>(x));
+        }
+        return std::min(eb, geb_);
+    }
+
     std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
             const Config &conf) override {
         return std::make_unique<PointwiseEBProvider<T>>(

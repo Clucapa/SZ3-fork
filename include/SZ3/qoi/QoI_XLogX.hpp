@@ -22,6 +22,17 @@ public:
         return static_cast<double>(val) * std::log(ax);
     }
 
+    T interpret_eb(T x) const override {
+        double d = static_cast<double>(x);
+        if (std::fabs(d) < 1e-15) return geb_;
+        double a = std::fabs(std::log(std::fabs(d)) + 1.0) / std::log(2.0);
+        double b = std::fabs(1.0 / (d * std::log(2.0)));
+        T eb = (b != 0.0) ? static_cast<T>((std::sqrt(a * a + 2.0 * b * tol_) - a) / b)
+              : (a != 0.0) ? static_cast<T>(tol_ / a)
+              : geb_;
+        return std::min(eb, geb_);
+    }
+
     std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
             const Config &conf) override {
         return std::make_unique<PointwiseEBProvider<T>>(

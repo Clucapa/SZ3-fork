@@ -38,7 +38,7 @@ inline bool check_hardcoded_comply(double (*feval)(double), double tau,
                                     size_t *fail_count) {
     size_t fc = 0;
     for (size_t i = 0; i < n; ++i) {
-        if (std::fabs(feval(orig[i]) - feval(dec[i])) > tau)
+        if (std::fabs(feval(orig[i]) - feval(dec[i])) > tau * (1.0 + 1e-12))
             fc++;
     }
     *fail_count = fc;

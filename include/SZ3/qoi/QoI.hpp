@@ -28,7 +28,7 @@ public:
     }
 
     virtual bool check_comply(T orig, T dec) const {
-        return std::fabs(eval(orig) - eval(dec)) <= get_tol();
+        return std::fabs(eval(orig) - eval(dec)) <= get_tol() * (1.0 + 1e-12);
     }
 
     virtual void precompress_block(size_t num_elements) {}

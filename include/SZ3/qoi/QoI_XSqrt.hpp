@@ -20,6 +20,14 @@ public:
         return std::sqrt(std::fabs(static_cast<double>(val)));
     }
 
+    T interpret_eb(T x) const override {
+        double d = std::fabs(static_cast<double>(x));
+        double sqr = std::sqrt(d);
+        T eb = sqr >= tol_ ? static_cast<T>(2.0 * tol_ * sqr - tol_ * tol_)
+                           : static_cast<T>(2.0 * tol_ * sqr + tol_ * tol_);
+        return std::min(eb, geb_);
+    }
+
     std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
             const Config &conf) override {
         return std::make_unique<PointwiseEBProvider<T>>(

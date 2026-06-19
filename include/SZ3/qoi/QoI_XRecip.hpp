@@ -22,6 +22,13 @@ public:
         return 1.0 / static_cast<double>(val);
     }
 
+    T interpret_eb(T x) const override {
+        double d = static_cast<double>(x);
+        T eb = d >= 0.0 ? static_cast<T>(tol_ * d * d / (1.0 + tol_ * d))
+                        : static_cast<T>(tol_ * d * d / (1.0 - tol_ * d));
+        return std::min(eb, geb_);
+    }
+
     bool check_comply(T orig, T dec) const override {
         if (orig == static_cast<T>(0)) return dec == static_cast<T>(0);
         if (dec == static_cast<T>(0)) return false;

@@ -20,6 +20,13 @@ public:
         return static_cast<double>(val) * val * val;
     }
 
+    T interpret_eb(T x) const override {
+        double d = static_cast<double>(x);
+        T eb = d >= 0.0 ? static_cast<T>(std::cbrt(d * d * d + tol_) - d)
+                        : static_cast<T>(d - std::cbrt(d * d * d - tol_));
+        return std::min(eb, geb_);
+    }
+
     std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
             const Config &conf) override {
         return std::make_unique<PointwiseEBProvider<T>>(

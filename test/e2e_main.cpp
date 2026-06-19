@@ -70,7 +70,7 @@ bool call_encoder(const std::string &expr, int &qoi_out,
     // Parse output lines: "qoi        = 0x1\nqoiParams  = \"...\"\n"
     auto pq = out.find("qoi        = "), pp = out.find("qoiParams  = \"");
     if (pq == std::string::npos || pp == std::string::npos) { error_out = "parse error"; return false; }
-    qoi_out = (int)strtoul(out.c_str() + pq + 14, nullptr, 16);
+    qoi_out = static_cast<int>(strtoul(out.c_str() + pq + 14, nullptr, 16));
     size_t qs = pp + 13;                        // position of opening '"'
     auto pe = out.find('"', qs + 1);            // find closing '"'
     if (pe == std::string::npos) { error_out = "param parse error"; return false; }
