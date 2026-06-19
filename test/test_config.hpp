@@ -53,34 +53,35 @@ struct QoiDef {
     double qEB;
     double absErrorBound;
     double (*feval)(double);
-    double (*feval2)(double);  // second group for MultiQoI, nullptr otherwise
-    double qEB2;               // tolerance for second group (same as qEB usually)
+    double (*feval2)(double);
+    double qEB2;
+    double max_data;
 };
 
 inline const QoiDef *all_qois() {
     static const QoiDef list[] = {
         // ---- pointwise base ----
-        {0x0,  "XLin",    DOM_UNRESTRICTED, false, 1.0,  10.0, h_xlin,        nullptr,    0},
-        {0x1,  "X2",      DOM_UNRESTRICTED, false, 1.0,  10.0, h_x2,          nullptr,    0},
-        {0x2,  "XCubic",  DOM_UNRESTRICTED, false, 1.0,  10.0, h_xcubic,      nullptr,    0},
-        {0x3,  "XSqrt",   DOM_NON_NEGATIVE, false, 0.1,  5.0,  h_xsqrt,       nullptr,    0},
-        {0x4,  "XExp",    DOM_UNRESTRICTED, false, 1.0,  10.0, h_xexp,        nullptr,    0},
-        {0x5,  "XLogX",   DOM_POSITIVE,     false, 1.0,  10.0, h_xlogx,       nullptr,    0},
-        {0x6,  "LogX",    DOM_POSITIVE,     false, 0.1,  5.0,  h_logx,        nullptr,    0},
-        {0x7,  "XRecip",  DOM_NON_ZERO,     false, 1.0,  10.0, h_xrecip,      nullptr,    0},
-        {0x8,  "XAbs",    DOM_UNRESTRICTED, false, 1.0,  10.0, h_xabs,        nullptr,    0},
-        {0x9,  "XSin",    DOM_UNRESTRICTED, false, 0.1,  5.0,  h_xsin,        nullptr,    0},
-        {0xA,  "XTanh",   DOM_UNRESTRICTED, false, 0.1,  5.0,  h_xtanh,       nullptr,    0},
-        {0xB,  "XPower",  DOM_UNRESTRICTED, false, 1.0,  10.0, h_xpow,        nullptr,    0},
+        {0x0,  "XLin",    DOM_UNRESTRICTED, false, 1.0,  10.0, h_xlin,        nullptr,    0, 0},
+        {0x1,  "X2",      DOM_UNRESTRICTED, false, 1.0,  10.0, h_x2,          nullptr,    0, 0},
+        {0x2,  "XCubic",  DOM_UNRESTRICTED, false, 1.0,  10.0, h_xcubic,      nullptr,    0, 0},
+        {0x3,  "XSqrt",   DOM_NON_NEGATIVE, false, 0.1,  5.0,  h_xsqrt,       nullptr,    0, 0},
+        {0x4,  "XExp",    DOM_UNRESTRICTED, false, 1.0,  10.0, h_xexp,        nullptr,    0, 30.0},
+        {0x5,  "XLogX",   DOM_POSITIVE,     false, 1.0,  10.0, h_xlogx,       nullptr,    0, 0},
+        {0x6,  "LogX",    DOM_POSITIVE,     false, 0.1,  5.0,  h_logx,        nullptr,    0, 0},
+        {0x7,  "XRecip",  DOM_NON_ZERO,     false, 1.0,  10.0, h_xrecip,      nullptr,    0, 0},
+        {0x8,  "XAbs",    DOM_UNRESTRICTED, false, 1.0,  10.0, h_xabs,        nullptr,    0, 0},
+        {0x9,  "XSin",    DOM_UNRESTRICTED, false, 0.1,  5.0,  h_xsin,        nullptr,    0, 0},
+        {0xA,  "XTanh",   DOM_UNRESTRICTED, false, 0.1,  5.0,  h_xtanh,       nullptr,    0, 0},
+        {0xB,  "XPower",  DOM_UNRESTRICTED, false, 1.0,  10.0, h_xpow,        nullptr,    0, 0},
         // ---- composite pointwise ----
-        {0x12, "SumQoI",  DOM_UNRESTRICTED, false, 1.0,  10.0, h_sum_xcubic_x2, nullptr, 0},
-        {0x1F3,"MultiQoI",DOM_UNRESTRICTED, false, 1.0,  10.0, h_multi_sqrt,    h_multi_x2, 1.0},
-        {0x14E,"Compose", DOM_UNRESTRICTED, false, 1.0,  10.0, h_comp_exp_x2,   nullptr,    0},
+        {0x12, "SumQoI",  DOM_UNRESTRICTED, false, 1.0,  10.0, h_sum_xcubic_x2, nullptr, 0, 0},
+        {0x1F3,"MultiQoI",DOM_UNRESTRICTED, false, 1.0,  10.0, h_multi_sqrt,    h_multi_x2, 1.0, 0},
+        {0x14E,"Compose", DOM_UNRESTRICTED, false, 1.0,  10.0, h_comp_exp_x2,   nullptr,    0, 0},
         // ---- regional ----
-        {~0,   "RegMean",   DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr, nullptr, 0},
-        {~1,   "RegMeanSq", DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr, nullptr, 0},
-        {~2,   "RegAvgInt", DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr, nullptr, 0},
-        {~3,   "RegMeanSqI",DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr, nullptr, 0},
+        {~0,   "RegMean",   DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr, nullptr, 0, 0},
+        {~1,   "RegMeanSq", DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr, nullptr, 0, 0},
+        {~2,   "RegAvgInt", DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr, nullptr, 0, 0},
+        {~3,   "RegMeanSqI",DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr, nullptr, 0, 0},
     };
     return list;
 }

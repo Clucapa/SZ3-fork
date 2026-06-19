@@ -78,6 +78,14 @@ static TestResult run_qoi_test(const QoiDef &qd, uint N, int algo, uint8_t ia,
     TestResult r; size_t num = dims[0]; if (N>=2) num*=dims[1]; if (N>=3) num*=dims[2];
 
     auto data = generate_data(pat, N, num, dims);
+    if (qd.max_data > 0) {
+        double max_val = 0;
+        for (auto v : data) max_val = std::max(max_val, std::fabs(v));
+        if (max_val > qd.max_data) {
+            double scale = qd.max_data / max_val;
+            for (auto &v : data) v *= scale;
+        }
+    }
     if (!sz3_test::data_ok_for_qoi(qd, data)) { r.fail_reason = "skip-domain"; return r; }
 
     auto conf = make_config(qd, N, algo, ia, dims);
