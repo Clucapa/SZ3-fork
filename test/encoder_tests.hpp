@@ -15,7 +15,6 @@
 #include "SZ3/api/sz.hpp"
 #include "test_config.hpp"
 #include "verify.hpp"
-#include "../tools/qoi_encoder/encode.hpp"
 
 namespace sz3_test {
 
@@ -23,7 +22,7 @@ struct EncoderTestCase {
     const char *label;
     const char *expr;
     double (*feval)(double);
-    double (*feval2)(double);  // second group for MultiQoI, nullptr otherwise
+    double (*feval2)(double);
     double qEB;
     double qEB2;
     double absErrorBound;
@@ -63,6 +62,11 @@ static double h_enc_comp_exp_cubic(double x)     { return std::exp(x * x * x); }
 static double h_enc_multi_abs(double x)   { return h_enc_abs(x); }
 static double h_enc_multi_sum(double x)   { return h_enc_exp3(x) + h_enc_sin(x); }
 
+// FX hardcoded evals (same functions as the encoder's SymEngine output)
+static double h_fx_sin_x2(double x)    { return std::sin(x) + x*x; }
+static double h_fx_sqrt_exp(double x)  { return std::sqrt(x) + std::exp(-x); }
+static double h_fx_x3_2x_1(double x)   { return x*x*x + 2.0*x + 1.0; }
+
 inline const EncoderTestCase *all_encoder_tests(int &count) {
     static const EncoderTestCase list[] = {
         {"LinDefault",   "lin",            h_enc_lin,        nullptr,             1.0, 0, 10.0, DOM_UNRESTRICTED},
@@ -92,6 +96,10 @@ inline const EncoderTestCase *all_encoder_tests(int &count) {
         {"CompAbsSin",   "abs@sin",         h_enc_comp_abs_sin, nullptr,           0.1, 0, 5.0,  DOM_UNRESTRICTED},
         {"CompNested",   "sqrt@exp(2)@sqr", h_enc_comp_sqrt_exp2_sqr, nullptr,     1.0, 0, 10.0, DOM_UNRESTRICTED},
         {"CompExpCubic", "exp@cubic",       h_enc_comp_exp_cubic,  nullptr,        1.0, 0, 10.0, DOM_UNRESTRICTED},
+        // ---- FX mode (encoder binary must be in PATH or via --encoder-path) ----
+        {"FX_SinX2",     "fx(\"sin(x)+x^2\")",     h_fx_sin_x2,     nullptr, 1.0, 0, 10.0, DOM_UNRESTRICTED},
+        {"FX_SqrtExp",   "fx(\"sqrt(x)+exp(-x)\")", h_fx_sqrt_exp,   nullptr, 1.0, 0, 10.0, DOM_NON_NEGATIVE},
+        {"FX_X3_2X_1",   "fx(\"x^3+2*x+1\")",      h_fx_x3_2x_1,    nullptr, 1.0, 0, 10.0, DOM_UNRESTRICTED},
     };
     count = sizeof(list) / sizeof(list[0]);
     return list;
