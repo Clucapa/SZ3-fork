@@ -55,6 +55,11 @@ target_compile_features(SZ3
         INTERFACE cxx_std_17
 )
 
+# TinyExpr — C source for QoI_FX, compiled as C
+add_library(tinyexpr STATIC include/SZ3/utils/tinyexpr/tinyexpr.c)
+target_include_directories(tinyexpr PUBLIC include/SZ3/utils/tinyexpr)
+target_link_libraries(SZ3 INTERFACE tinyexpr)
+
 find_package(OpenMP)
 if (OpenMP_FOUND)
     target_link_libraries(SZ3 INTERFACE OpenMP::OpenMP_CXX)

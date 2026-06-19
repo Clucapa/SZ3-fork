@@ -22,6 +22,7 @@
 #include "SZ3/qoi/QoI_SumQoI.hpp"
 #include "SZ3/qoi/QoI_MultiQoI.hpp"
 #include "SZ3/qoi/QoI_Compose.hpp"
+#include "SZ3/qoi/QoI_FX.hpp"
 #include "SZ3/qoi/RegionalMean.hpp"
 #include "SZ3/qoi/RegionalMeanSq.hpp"
 #include "SZ3/qoi/QoI_RegionalAvgInterp.hpp"
@@ -238,6 +239,12 @@ std::shared_ptr<concepts::QoIIf<T, N>> assemble_from_nibbles(
 
 template <class T, uint N>
 std::shared_ptr<concepts::QoIIf<T, N>> GetQOI(const Config &conf) {
+    // FX mode: high nibble = 0x7
+    if (((conf.qoi >> 28) & 0xF) == 7) {
+        auto raw = detail::base64_decode(conf.qoiParams);
+        return std::make_shared<QoI_FX<T, N>>(conf.qEB, conf.absErrorBound, raw);
+    }
+
     if (conf.qoi < 0) {
         int rid = ~conf.qoi;
         switch (rid) {
