@@ -97,6 +97,7 @@ int main(int argc, char **argv) {
         else { usage(argv[0]); return 1; }
     }
     int total=0, passed=0, skipped=0;
+    size_t size_idx = 0;  // cycles 1D/2D sizes through 500-524
     const uint8_t ia[]={SZ3::INTERP_ALGO_CUBIC,SZ3::INTERP_ALGO_LINEAR};
 
     // Print pass/fail diagnostics for one test case.
@@ -113,22 +114,29 @@ int main(int argc, char **argv) {
     if (!compose_only) {
         auto qs=all_qois();
         for (int di=0; di<num_qois(); ++di){ auto &qd=qs[di];
-            for (uint N=1; N<=3; ++N){ std::array<size_t,3> ds{dim_size(N,512),dim_size(N,32),dim_size(N,18)};
+            for (uint N=1; N<=3; ++N){
+                size_t nx = dim_size(N, size_idx);
+                size_t ny = dim_size(N, size_idx + 1);
+                size_t nz = dim_size(N, size_idx + 2);
+                std::array<size_t,3> ds{nx, ny, nz};
                 for (int pi=0; pi<num_data_patterns(); ++pi){ int p=ALL_PATTERNS[pi];
                     // Block
                     if (!algo_mask||(algo_mask&(1<<TALGO_BLOCK))){
                         if (fast&&!fast_filter(qd,N,p)) goto nxt;
+                        size_idx++;
                         run(qd.name,N,p,TALGO_BLOCK,SZ3::INTERP_ALGO_CUBIC,run_qoi_test(qd,N,TALGO_BLOCK,SZ3::INTERP_ALGO_CUBIC,p,ds));
                     } nxt:(void)0;
                     // Interp (Cubic + Linear, 1D/2D only)
                     if ((!algo_mask||(algo_mask&(1<<TALGO_INTERP)))&&N<=2) for (auto a:ia){
                         if (fast&&a==SZ3::INTERP_ALGO_LINEAR&&!fast_filter_interp_linear(qd,N,p)) continue;
+                        size_idx++;
                         run(qd.name,N,p,TALGO_INTERP,a,run_qoi_test(qd,N,TALGO_INTERP,a,p,ds));
                     }
                     // InterpLorenzo (Cubic + Linear, 1D/2D only)
                     if ((!algo_mask||(algo_mask&(1<<TALGO_INTERP_LORENZO)))&&N<=2) for (auto a:ia){
                         if (fast&&!fast_filter_lorenzo_interp(qd,N,p)) continue;
                         if (fast&&a==SZ3::INTERP_ALGO_LINEAR&&!fast_filter_interp_linear(qd,N,p)) continue;
+                        size_idx++;
                         run(qd.name,N,p,TALGO_INTERP_LORENZO,a,run_qoi_test(qd,N,TALGO_INTERP_LORENZO,a,p,ds));
                     }
                 }
@@ -141,13 +149,15 @@ int main(int argc, char **argv) {
         int n=0; auto ts=all_encoder_tests(n);
         const int ps[]={D1_RAMP,D3_SINUSOID};
         const int as[]={TALGO_BLOCK,TALGO_INTERP};
-        std::array<size_t,3> ds={512,32,18};
         for (int ti=0; ti<n; ++ti){ auto &tc=ts[ti];
             for (int p:ps) for (int a:as){
                 if (algo_mask&&!(algo_mask&(1<<a))) continue;
                 if (fast&&a==TALGO_INTERP) continue;
+                size_t nx = dim_size(1, size_idx);
+                std::array<size_t,3> eds{nx, 32, 18};
+                size_idx++;
                 run(tc.label,1,p,a,SZ3::INTERP_ALGO_CUBIC,
-                    run_encoder_test(tc,1,a,SZ3::INTERP_ALGO_CUBIC,p,ds));
+                    run_encoder_test(tc,1,a,SZ3::INTERP_ALGO_CUBIC,p,eds));
             }
         }
     }

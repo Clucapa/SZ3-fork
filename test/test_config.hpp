@@ -88,13 +88,11 @@ inline const QoiDef *all_qois() {
 inline int num_qois()         { return 19; }
 inline int num_data_patterns() { return 8; }
 
-inline size_t dim_size(uint N, size_t dft1) {
-    switch (N) {
-        case 1: return dft1;
-        case 2: return 32;
-        case 3: return 18;
-        default: return dft1;
-    }
+// Cycle 1D/2D sizes through 500–524 using prime-step increments.
+// 3D stays at 18 (block-size boundary already non-power-of-2).
+inline size_t dim_size(uint N, size_t idx) {
+    if (N == 3) return 18;
+    return 500 + ((3 * idx) % 25);
 }
 
 inline SZ3::Config make_config(const QoiDef &qd, uint N, int algo,
