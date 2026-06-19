@@ -50,7 +50,7 @@ jobs:
         env:
           MSG: ${{ github.event.head_commit.message }}
         run: |
-          MSG=$(echo "$MSG" | tr -d '\n\r')
+          MSG=$(echo "$MSG" | head -1)
           BRACKET=$(echo "$MSG" | grep -oP '\[[^\]]*\]\s*$' | sed 's/.*\[\(.*\)\].*/\1/' | xargs)
           run_build=false
           run_test=false
