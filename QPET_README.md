@@ -78,20 +78,24 @@ class EBProvider {
 ```
 include/SZ3/qoi/
 ├── QoI.hpp                          QoIIf 基类（eval, create_eb_provider, is_pointwise）
-├── QoIIf.hpp                        工厂 GetQOI + nibble 解析器
+├── QoIIf.hpp                        工厂 GetQOI + nibble 解析器 + base64_decode
 ├── EBProvider.hpp                   EBProvider 抽象接口
 ├── PointwiseEBProvider.hpp          点态 eb 源
 ├── MultiQoIEBProvider.hpp           多 provider min 组合
-├── QoIXLin.hpp / QoIX2.hpp          基函数（已有，增加 eval + create_eb_provider）
+├── QoIXLin.hpp / QoIX2.hpp          基函数（已有，增加 eval + create_eb_provider + 参数化构造）
 ├── QoI_XCubic.hpp .. QoI_XPower.hpp  10 个新增基函数（通过 eval() 自动推导 interpret_eb）
 ├── QoI_SumQoI.hpp                   组内求和约束（Σ fi，数值导数推 eb）
 ├── QoI_MultiQoI.hpp                 多组 AND 约束（取 min eb）
+├── QoI_Compose.hpp                  函数嵌套 Compose(f,g) = f(g(x))
 ├── RegionalMean.hpp / RegionalMeanSq.hpp            blockwise Regional QoI
 ├── QoI_RegionalAvgInterp.hpp / QoI_RegionalMeanSqInterp.hpp   Interp 路径专用 QoI
 │
 include/SZ3/decomposition/
 ├── QpetBlockDecomp.hpp              块级分解器（Lorenzo/Regression）
-└── QpetInterpDecomp.hpp             插值分解器（linear/cubic，锚点支持）
+└── QpetInterpDecomp.hpp             插值分解器（linear/cubic，锚点支持 + check_comply 安全网）
+│
+tools/qoi_encoder/                   独立 encoder CLI 工具（见下方）
+test/                                端到端参数化测试套件（见下方）
 ```
 
 ### 修改（对 SZ3 基底侵入控制在最小范围）
@@ -100,34 +104,108 @@ include/SZ3/decomposition/
 |------|----------|
 | `SZ3/qoi/QoI.hpp` | 增加 `eval()`, `create_eb_provider()`, `is_pointwise()` 三个虚方法。仅此一个文件有接口级变更，且向后兼容 |
 | `SZ3/decomposition/Decomposition.hpp` | 补一个 `#include Config.hpp`（原代码依赖 GCC 惰性查模板名，非标准行为） |
-| `SZ3/qoi/QoIIf.hpp` | 工厂从 4 个 case 扩展到 6 个 legacy case + nibble 解析路径 |
-| `SZ3/api/impl/SZDispatcher.hpp` | `qoi->id < 10` 改为 `qoi->is_pointwise()`；Interp 路径增加 qoi≥12 的路由 |
+| `SZ3/qoi/QoIIf.hpp` | 工厂从 4 个 case 扩展到 6 个 legacy case + nibble 解析路径（含 0xE Compose 递归下降） |
+| `SZ3/api/impl/SZDispatcher.hpp` | `qoi->id < 10` 改为 `qoi->is_pointwise()`；Interp 路径统一走 `_qpet` |
 | `SZ3/api/impl/SZAlgoInterp.hpp` | 新增 `SZ_compress_Interp_qpet` / `SZ_decompress_Interp_qpet` |
 | `SZ3/decomposition/QpetBlockDecomp.hpp` | `if (qoi->id == 10/11)` 硬编码 dispatch 替换为 `qoi->create_eb_provider(conf)` |
-| `SZ3/decomposition/QpetInterpDecomp.hpp` | 同上 |
-| `SZ3/utils/Config.hpp` | 无修改（nibble 编码复用现有 `int qoi` 字段，不扩字段） |
+| `SZ3/decomposition/QpetInterpDecomp.hpp` | 同上；新增 `precompress_block` + `check_comply` 安全网 + `interpret_eb` 位置无关 eb 取值 |
+| `SZ3/utils/Config.hpp` | 新增 `std::string qoiParams`（base64 参数）；删除 `qEBase`/`qELogB` |
 
 ## Nibble 编码：组合 QoI 无侵入表达
 
-不需要在 Config 中新增字段来表达复合 QoI。`int qoi` 的低位每 4 bit 为一格，`0xF` 为组分隔符，组内 Sum、组间 AND：
+不需要在 Config 中新增字段来表达复合 QoI。`int qoi` 的低位每 4 bit 为一格，`0xF` 为组分隔符，`0xE` 为函数嵌套运算符，组内 Sum、组间 AND。
 
-| 编码 | 含义 |
-|------|------|
+### 编码算子表
+
+| nibble | 含义 |
+|--------|------|
+| `0x0` ~ `0xB` | 基函数（见下方对照表） |
+| `0xC` ~ `0xD` | 预留 |
+| `0xE` | Compose(f, g) — 严格 2 操作数，prefix 式（`E f g`） |
+| `0xF` | 组分隔符 — 结束当前组，开始下一组 |
+
+### 编码示例
+
+| `conf.qoi` | 含义 |
+|------------|------|
 | `0x1` | 单独 XSquare |
 | `0x12` | XSquare + XCubic（组内求和约束） |
 | `0x1F3` | XSquare AND XSqrt（两组 AND） |
 | `0x12F3F456` | Sum(1,2) AND 3 AND Sum(4,5,6) |
+| `0x14E` | Compose(XExp, XSquare) = eˣ² |
+| `0x0E1E2E3` | Compose(XLin, Compose(XSquare, Compose(XCubic, XSqrt))) |
+
+### Compose 恒等 elision
+
+内部做恒等消除：`Compose(f, XLin(1,0))` → `f`，`Compose(XLin(1,0), g)` → `g`。最外层 `GetQOI(conf)` 对 `qoi == 0` 和 `qoi == 1` 的硬编码 dispatch 不参与 elision，保证接口稳定。
+
+### 基函数 Nibble 对照表
+
+| nibble | 类名 | f(x) | 参数 | 默认 |
+|--------|------|------|------|------|
+| `0x0` | QoI_XLin | Ax + B | A, B | 1, 0 |
+| `0x1` | QoI_X2 | x² | — | — |
+| `0x2` | QoI_XCubic | x³ | — | — |
+| `0x3` | QoI_XSqrt | √x | — | — |
+| `0x4` | QoI_XExp | aˣ | base (a) | e |
+| `0x5` | QoI_XLogX | x·log(x) | — | — |
+| `0x6` | QoI_LogX | log_a x | base (a) | e |
+| `0x7` | QoI_XRecip | 1/x | — | — |
+| `0x8` | QoI_XAbs | \|x\| | — | — |
+| `0x9` | QoI_XSin | sin(x) | — | — |
+| `0xA` | QoI_XTanh | tanh(x) | — | — |
+| `0xB` | QoI_XPower | x^a | expo (a) | 2 |
+
+## qoiParams：Base64 参数传递
+
+有参数的基函数（XLin, XExp, LogX, XPower）通过 `Config::qoiParams` 传入 base64 编码的 `double[]`。工厂在运行时 base64 decode → `ParamReader` 按 nibble 遍历顺序依次消费。
+
+空串 = 无参数 = 全部使用默认值，向后兼容。
+
+```
+表达式: XLin(2, 1.5) + Exp(10) + XSquare
+qoi = 0x140
+qoiParams = base64_encode([2.0, 1.5, 10.0])
+→ nibble 遍历顺序: XSquare(无参) → XLin(读2,1.5) → XExp(读10)
+```
+
+## FX 模式：任意函数约束（计划中）
+
+`qoi` 的最高 nibble（bit 28–31）为 `0x7` 时标记 FX 模式，跳过 nibble 解析，走 `QoI_FX` 路径。
+
+```
+qoi = 0x70000000
+qoiParams = base64( f_str + df_str + ddf_str )
+
+管道:
+  SymEngine 符号求导 → TinyExpr compile → QoI_FX(eval/interpret_eb 精确导数)
+```
+
+FX 模式专用 `QoI_FX` 类，不依赖数值导数。`qoiParams` 格式：`[4B:len_f][len_f:f_str][4B:len_df][len_df:df_str][4B:len_ddf][len_ddf:ddf_str]` → base64。
+
+### qoi_encoder 工具（计划中）
+
+```
+tools/qoi_encoder/
+  main.cpp    CLI: 表达式 → qoi + base64
+
+用法:
+  ./qoi_encoder "sqr+abs+cubic"              → qoi=0x128
+  ./qoi_encoder "lin(2,0.5)+exp(10)+sqr"    → qoi=0x140, params="AAAAABAAAAAAAAAAF8A..."
+  ./qoi_encoder "exp(2.718)@sqr"             → qoi=0x14E, params="..."
+  ./qoi_encoder "fx(\"sin(x)+x^2\")"         → qoi=0x70000000, params="..."
+```
 
 ## ~ 翻转标记 Regional
 
 Regional QoI 有独立编号（0: RegionalMean, 1: RegionalMeanSq, 2: RegionalAvgInterp, 3: RegionalMeanSqInterp），使用时将编号做 `~` 翻转存入 `conf.qoi`。翻转后最高位为 1，工厂据此分流 regional/pointwise，无需额外 flag 字段。
 
-| 编号 | `conf.qoi` | QoI |
-|------|-----------|-----|
-| 0 | `~0` | RegionalMean（区间均值 budget tracking） |
-| 1 | `~1` | RegionalMeanSq（区间平方和 budget tracking） |
-| 2 | `~2` | RegionalAvgInterp（Interp 路径均值） |
-| 3 | `~3` | RegionalMeanSqInterp（Interp 路径平方和） |
+| 编号 | `conf.qoi` | QoI | 约束 | 路径 |
+|------|-----------|-----|------|------|
+| 0 | `~0` | RegionalMean | `|mean(orig) - mean(dec)| ≤ τ` | blockwise |
+| 1 | `~1` | RegionalMeanSq | `|mean(orig²) - mean(dec²)| ≤ τ` | blockwise |
+| 2 | `~2` | RegionalAvgInterp | 同 RegionalMean | interp |
+| 3 | `~3` | RegionalMeanSqInterp | 同 RegionalMeanSq | interp |
 
 `is_pointwise()` 基类实现为 `return id >= 0;`，regional QoI 的 id 为负值（`~rid`），自动返回 false，无需子类逐个重写。
 
@@ -140,6 +218,8 @@ InterpolationDecomposition（线性/三次样条分层插值）是 SZ3 的另一
 - 照搬 InterpolationDecomposition 的所有遍历与插值逻辑，但每一处的 `quantize_and_overwrite(d, pred)` 替换为两步量化 `qnt_eb(eb) + qnt_overwrite(d, pred, eb)`
 - EBProvider 通过 `qoi->create_eb_provider(conf)` 注入，与 blockwise 路径一致
 - 锚点网格走 QpetQnt 的 `force_save_unpred` / `recv` 无损保存
+- **QoI 安全网**：量化后逐点 `check_comply`，不满足时回写原始值（无损），与 BlockDecomp 一致
+- **位置无关 eb 取值**：使用 `qoi->interpret_eb(orig_val)` 直接计算 eb，不依赖 `advance()` 的顺序递增假设，适应 stride 遍历顺序
 - 文件格式 `[qi_ebs | qi_datas]` 与 blockwise 路径统一
 
 这一设计使两类预测器（Lorenzo/Regression vs Interp）共享完全相同的 QoI + EBProvider + QpetQnt 栈，新增 QoI 类型时两条路径自动受益。
@@ -151,16 +231,6 @@ InterpolationDecomposition（线性/三次样条分层插值）是 SZ3 的另一
 ```
 
 Blockwise 和 Interp 路径统一：`qi_vec` 前半为 qi_eb，后半为 qi_data。
-
-## CI
-
-commit message 末尾 `[关键字...]` 控制 CI：
-
-| 关键字 | 效果 |
-|--------|------|
-| `[build]` | Linux 编译 |
-| `[test]` 或 `[test build]` | Linux 编译 + QoI 单元测试 |
-| `[]` | 仅检查非 ASCII 字符 |
 
 ## 编译与测试
 
@@ -174,118 +244,83 @@ commit message 末尾 `[关键字...]` 控制 CI：
 ### 编译
 
 ```bash
-# 1. 配置
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DSZ3_USE_BUNDLED_ZSTD=OFF
-
-# 2. 编译（所有目标，包含测试）
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel 4
-
-# 3. 测试二进制在 build/test/bin/ 下，例如：
-#    build/test/bin/test_qpet_qoi
-#    build/test/bin/test_qpet_composite
-#    等等
 ```
-
-注意：`tools/test/CMakeLists.txt` 会把 `tools/test/modules/` 下的每个 `.cpp` 自动生成一个独立测试可执行文件，所以测试文件名即为二进制名。
 
 ### 运行测试
 
 ```bash
-# 按需单个运行（替换 <name> 为文件名）
-./build/test/bin/<name>
+# CI 门禁（e2e --fast，<1s）
+cd build && ctest --output-on-failure
 
-# 或者 git commit 时用 git hook 批量跑所有：
-TESTS="test_qpet_qoi test_qpet_eb_provider test_qpet_regional test_qpet_interp test_qpet_composite"
-for t in $TESTS; do
-    ./build/test/bin/$t || echo "FAIL: $t"
-done
+# 全量 e2e（e2e --full，~2min）
+./test/bin/e2e --full
+
+# 单个 GTest 模块（本地调试用）
+./test/bin/test_qpet_qoi
+./test/bin/test_qpet_composite
 ```
 
 ### 测试覆盖清单
 
-| 测试文件 | 测试内容 |
-|----------|----------|
-| `test_qpet_qoi` | XLin / X2 的 `interpret_eb`、`check_comply`、`set_tol`/`set_geb` |
-| `test_qpet_eb_provider` | PointwiseEBProvider 的 `advance`（压缩/解压）、`reset`、`save/load`、`double` 类型 |
-| `test_qpet_regional` | RegionalMean / RegionalMeanSq 的 budget tracking、geb capping、负值对称性、无状态 save/load |
-| `test_qpet_interp` | QpetInterpDecomp 的 1D/2D round-trip、linear/cubic、anchor 无损、RegionalMeanSqInterp、qebs/qds 一致性 |
-| `test_qpet_composite` | 12 个基函数全覆盖（`eval` / `check_comply` / `interpret_eb` 各 1 case）；SumQoI、MultiQoI、MultiQoIEBProvider；nibble 解析器（单函数/Sum/AND/复杂编码/非法 nibble）；`create_eb_provider` 集成；**端到端**：X2 pointwise 与 RegionalMean 完整 compress→decompress→逐点/均值约束验证 |
+| 测试 | 类型 | 内容 |
+|------|------|------|
+| `e2e` | 端到端 | 19 QoI × 8 数据模式 × 3 维 × 5 算法变体（Block / Interp-Cubic / Interp-Linear / ILorenzo-Cubic / ILorenzo-Linear）。逐点 check_comply + Regional 聚合约束 + absErrorBound |
+| `test_qpet_interp_pointwise` | 端到端 | ALGO_INTERP + pointwise QoI 通过 dispatcher 的完整 compress→decompress→QoI 验证 |
+| `test_qpet_qoi` | 单元 | XLin / X2 的 `interpret_eb`、`check_comply`、`set_tol`/`set_geb` |
+| `test_qpet_eb_provider` | 单元 | PointwiseEBProvider 的 `advance`（压缩/解压）、`reset`、`save/load`、`double` 类型 |
+| `test_qpet_regional` | 单元 | RegionalMean / RegionalMeanSq 的 budget tracking、geb capping、负值对称性 |
+| `test_qpet_interp` | 单元+端到端 | QpetInterpDecomp 的 1D/2D round-trip、linear/cubic、anchor 无损、RegionalMeanSqInterp |
+| `test_qpet_composite` | 单元+端到端 | 12 基函数全覆盖；SumQoI、MultiQoI、Compose；nibble 解析器；端到端 Lorenzo 压缩 |
 
-## 非测试的配置与调用
+### CI
 
-### API 视角：如何启动 QPET
+commit message 末尾 `[关键字...]` 控制：
 
-QPET 的使用入口仍是 `SZ_compress_dispatcher`，只需要在 `Config` 中设置：
+| 关键字 | 效果 |
+|--------|------|
+| （不带标签） | 仅检查非 ASCII 字符 |
+| `[build]` | Linux 编译 |
+| `[test]` | 编译 + `e2e --fast`（CI 门禁，<1s） |
+| `[full]` | 编译 + `e2e --full`（全量 1700+ 条，~2min） |
+
+## API 调用
+
+QPET 的使用入口仍是 `SZ_compress_dispatcher`，在 `Config` 中设置：
 
 ```cpp
 #include "SZ3/api/SZ3.hpp"
 
 SZ3::Config conf;
 conf.setDims(dims.begin(), dims.end());
-conf.cmprAlgo  = SZ3::ALGO_LORENZO_REG;  // blockwise 预测（Lorenzo/Regression）
-// 或 conf.cmprAlgo = SZ3::ALGO_INTERP; // 插值预测
+conf.cmprAlgo  = SZ3::ALGO_LORENZO_REG;  // 或 ALGO_INTERP / ALGO_INTERP_LORENZO
 
-// --- 选 QoI（三选一）---
-// 1) legacy 模式（不使用 QPET nibble/regional）
+// --- 选 QoI ---
+// 1) legacy
 conf.qoi = 0;   // XLin (f(x)=x)
 conf.qoi = 1;   // X2   (f(x)=x²)
 
-// 2) nibble 编码（点态组合）
+// 2) nibble 编码（点态组合，含 Compose）
 conf.qoi = 0x2;       // XCubic
-conf.qoi = 0x12;      // X2 + XCubic (组内 Sum)
-conf.qoi = 0x1F3;     // X2 AND XSqrt (两组 AND)
+conf.qoi = 0x12;      // X2 + XCubic (Sum)
+conf.qoi = 0x1F3;     // X2 AND XSqrt (MultiQoI)
+conf.qoi = 0x14E;     // Compose(Exp, Square) = e^(x²)
 
 // 3) regional（~翻转）
-conf.qoi = ~0;   // RegionalMean (blockwise budget tracking)
+conf.qoi = ~0;   // RegionalMean
 conf.qoi = ~1;   // RegionalMeanSq
-conf.qoi = ~2;   // RegionalAvgInterp (interp 路径)
+conf.qoi = ~2;   // RegionalAvgInterp
 conf.qoi = ~3;   // RegionalMeanSqInterp
 
+// --- 参数化（可选，空串 = 默认值）---
+conf.qoiParams = "";   // 无参数，全部用默认值
+
 // --- QPET 量化参数 ---
-conf.qEB    = 0.01;   // 全局 eb（geb）
-conf.qEBase = 3.0;    // eb' 对数量化底数
-conf.qELogB = 0.2;    // eb' 量化 bins 参数
-conf.qR     = 12;      // eb' 量化 range
+conf.qEB    = 0.01;   // QoI tolerance (τ / geb)
+conf.qR     = 12;     // eb 量化 range
 conf.quantbinCnt = 65536;
 
-// 压缩
-sz_compress(&conf, data, cmpData, &cmpSize);
-// 解压
-sz_decompress(decData, cmpData, cmpSize);
+size_t cmpSize = SZ_compress(conf, data, outBuf, outCap);
+double *dec = SZ_decompress(conf2, outBuf, cmpSize);
 ```
-
-### 基函数 Nibble 对照表
-
-| nibble | 类名 | f(x) |
-|--------|------|------|
-| `0x0` | QoI_XLin | x |
-| `0x1` | QoI_X2 | x² |
-| `0x2` | QoI_XCubic | x³ |
-| `0x3` | QoI_XSqrt | √x |
-| `0x4` | QoI_XExp | eˣ |
-| `0x5` | QoI_XLogX | x·log(x) |
-| `0x6` | QoI_LogX | log(x) |
-| `0x7` | QoI_XRecip | 1/x |
-| `0x8` | QoI_XAbs | \|x\| |
-| `0x9` | QoI_XSin | sin(x) |
-| `0xA` | QoI_XTanh | tanh(x) |
-| `0xB` | QoI_XPower | xⁿ (n 默认为 2) |
-| `0xF` | —— | 组分隔符 |
-
-### 组合 QoI 编码示例
-
-| conf.qoi | 含义 |
-|----------|------|
-| `0x1` | X² |
-| `0x12` | X² + X³（组内求和约束） |
-| `0x1F3` | X² AND √x（两组 AND） |
-| `0x12F3F456` | Sum(1,2) AND 3 AND Sum(4,5,6) |
-
-### Regional QoI 对照表
-
-| `conf.qoi` | 类名 | 含义 | 路径 |
-|------------|------|------|------|
-| `~0` | RegionalMean | 区间均值 budget tracking | blockwise |
-| `~1` | RegionalMeanSq | 区间平方和 budget tracking | blockwise |
-| `~2` | RegionalAvgInterp | 固定 geb | interp |
-| `~3` | RegionalMeanSqInterp | 固定 geb | interp |
