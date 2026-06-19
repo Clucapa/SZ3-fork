@@ -1,6 +1,9 @@
 #ifndef SZ3_TEST_DATA_GEN_HPP
 #define SZ3_TEST_DATA_GEN_HPP
 
+// Synthetic data generators for the e2e QOI test suite.
+// Each pattern has 1D, 2D, and 3D variants stored row-major.
+
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -9,6 +12,7 @@
 
 namespace sz3_test {
 
+// The 8 data patterns used to stress different QOI and predictor behaviors.
 enum DataPattern { D1_RAMP = 1, D2_WIDE, D3_SINUSOID, D4_CLIFF, D5_ZEROCROSS, D6_EXP, D7_CONST, D8_RANDWALK };
 
 inline const char *pattern_name(int p) {
@@ -25,24 +29,31 @@ inline const char *pattern_name(int p) {
     }
 }
 
-// ---------- 1D generators ----------
+// ==========================================================================
+// 1D generators
+// ==========================================================================
 
+// D1: linear ramp 0 → 100, optimal for any predictor.
 inline std::vector<double> gen_d1_ramp(size_t n) {
     std::vector<double> d(n);
-    for (size_t i = 0; i < n; ++i) d[i] = static_cast<double>(i) / (n - 1) * 100.0;
+    for (size_t i = 0; i < n; ++i)
+        d[i] = static_cast<double>(i) / (n - 1) * 100.0;
     return d;
 }
 
+// D2: log-spaced geometric ramp 0.001 → 10000.
+// Stresses per-point eb variation (tiny eb at large x for X2/XCubic/Exp).
 inline std::vector<double> gen_d2_wide(size_t n) {
     std::vector<double> d(n);
     double lo = -3.0, hi = 4.0;
     for (size_t i = 0; i < n; ++i) {
         double t = lo + (hi - lo) * i / (n - 1);
-        d[i] = std::pow(10.0, t);  // 0.001 ~ 10000
+        d[i] = std::pow(10.0, t);
     }
     return d;
 }
 
+// D3: two-tone sinusoid + Gaussian noise, representative of real-world data.
 inline std::vector<double> gen_d3_sinusoid(size_t n, unsigned seed = 42) {
     std::vector<double> d(n);
     std::mt19937 rng(seed);
@@ -56,6 +67,8 @@ inline std::vector<double> gen_d3_sinusoid(size_t n, unsigned seed = 42) {
     return d;
 }
 
+// D4: sharp cliff 0.1 → 1000 with 4-point transition.
+// Forces predictor failure at the discontinuity.
 inline std::vector<double> gen_d4_cliff(size_t n) {
     std::vector<double> d(n);
     size_t half = n / 2;
@@ -71,24 +84,32 @@ inline std::vector<double> gen_d4_cliff(size_t n) {
     return d;
 }
 
+// D5: linear ramp -100 → 100, crosses zero.
+// Tests QOIs with zero-sensitive domain (XRecip, XAbs, derivative at 0).
 inline std::vector<double> gen_d5_zerocross(size_t n) {
     std::vector<double> d(n);
     double lo = -100.0, hi = 100.0;
-    for (size_t i = 0; i < n; ++i) d[i] = lo + (hi - lo) * i / (n - 1);
+    for (size_t i = 0; i < n; ++i)
+        d[i] = lo + (hi - lo) * i / (n - 1);
     return d;
 }
 
+// D6: exponential growth 1.02^i, naturally aligned with XExp QOI.
 inline std::vector<double> gen_d6_exp(size_t n) {
     std::vector<double> d(n);
     double base = 1.02;
-    for (size_t i = 0; i < n; ++i) d[i] = std::pow(base, static_cast<double>(i));
+    for (size_t i = 0; i < n; ++i)
+        d[i] = std::pow(base, static_cast<double>(i));
     return d;
 }
 
+// D7: constant value, edge case for all predictors.
 inline std::vector<double> gen_d7_const(size_t n) {
     return std::vector<double>(n, 42.0);
 }
 
+// D8: Gaussian random walk, worst-case for any predictor.
+// Maximally depends on per-point eb to bound QOI error.
 inline std::vector<double> gen_d8_randwalk(size_t n, unsigned seed = 99) {
     std::vector<double> d(n);
     std::mt19937 rng(seed);
@@ -101,16 +122,21 @@ inline std::vector<double> gen_d8_randwalk(size_t n, unsigned seed = 99) {
     return d;
 }
 
-// ---------- 2D generators (row-major flattening) ----------
+// ==========================================================================
+// 2D generators (row-major: d[iy * nx + ix])
+// ==========================================================================
 
+// D1 2D: sum of linear ramps along each axis.
 inline std::vector<double> gen_d1_ramp_2d(size_t nx, size_t ny) {
     std::vector<double> d(nx * ny);
     for (size_t iy = 0; iy < ny; ++iy)
         for (size_t ix = 0; ix < nx; ++ix)
-            d[iy * nx + ix] = (static_cast<double>(ix) / (nx - 1) + static_cast<double>(iy) / (ny - 1)) * 50.0;
+            d[iy * nx + ix] = (static_cast<double>(ix) / (nx - 1)
+                             + static_cast<double>(iy) / (ny - 1)) * 50.0;
     return d;
 }
 
+// D2 2D: geometric mean of log-spaced ramps along each axis.
 inline std::vector<double> gen_d2_wide_2d(size_t nx, size_t ny) {
     std::vector<double> d(nx * ny);
     double lo = -3.0, hi = 4.0;
@@ -118,12 +144,13 @@ inline std::vector<double> gen_d2_wide_2d(size_t nx, size_t ny) {
         double ty = lo + (hi - lo) * iy / (ny - 1);
         for (size_t ix = 0; ix < nx; ++ix) {
             double tx = lo + (hi - lo) * ix / (nx - 1);
-            d[iy * nx + ix] = std::pow(10.0, (tx + ty) * 0.5);  // 0.001 ~ 10000
+            d[iy * nx + ix] = std::pow(10.0, (tx + ty) * 0.5);
         }
     }
     return d;
 }
 
+// D3 2D: separable sinusoids + cross term + noise.
 inline std::vector<double> gen_d3_sinusoid_2d(size_t nx, size_t ny, unsigned seed = 42) {
     std::vector<double> d(nx * ny);
     std::mt19937 rng(seed);
@@ -141,6 +168,7 @@ inline std::vector<double> gen_d3_sinusoid_2d(size_t nx, size_t ny, unsigned see
     return d;
 }
 
+// D4 2D: quadrant split — top-left = 0.1, rest = 1000.
 inline std::vector<double> gen_d4_cliff_2d(size_t nx, size_t ny) {
     std::vector<double> d(nx * ny);
     size_t hx = nx / 2, hy = ny / 2;
@@ -188,15 +216,20 @@ inline std::vector<double> gen_d8_randwalk_2d(size_t nx, size_t ny, unsigned see
     return d;
 }
 
-// ---------- 3D generators (row-major flattening) ----------
+// ==========================================================================
+// 3D generators (row-major: d[(iz * ny + iy) * nx + ix])
+// ==========================================================================
 
+// D1 3D: sum of ramps along all three axes.
 inline std::vector<double> gen_d1_ramp_3d(size_t nx, size_t ny, size_t nz) {
     std::vector<double> d(nx * ny * nz);
     for (size_t iz = 0; iz < nz; ++iz)
         for (size_t iy = 0; iy < ny; ++iy)
             for (size_t ix = 0; ix < nx; ++ix) {
                 size_t idx = (iz * ny + iy) * nx + ix;
-                d[idx] = (static_cast<double>(ix) / (nx - 1) + static_cast<double>(iy) / (ny - 1) + static_cast<double>(iz) / (nz - 1)) * 33.3;
+                d[idx] = (static_cast<double>(ix) / (nx - 1)
+                        + static_cast<double>(iy) / (ny - 1)
+                        + static_cast<double>(iz) / (nz - 1)) * 33.3;
             }
     return d;
 }
@@ -239,6 +272,7 @@ inline std::vector<double> gen_d3_sinusoid_3d(size_t nx, size_t ny, size_t nz, u
     return d;
 }
 
+// D4 3D: octant split — low octant = 0.1, rest = 1000.
 inline std::vector<double> gen_d4_cliff_3d(size_t nx, size_t ny, size_t nz) {
     std::vector<double> d(nx * ny * nz);
     size_t hx = nx / 2, hy = ny / 2, hz = nz / 2;
@@ -251,7 +285,6 @@ inline std::vector<double> gen_d4_cliff_3d(size_t nx, size_t ny, size_t nz) {
     return d;
 }
 
-// 3D: proper 3D generators
 inline std::vector<double> gen_d5_zerocross_3d(size_t nx, size_t ny, size_t nz) {
     std::vector<double> d(nx * ny * nz);
     double lo = -100.0, hi = 100.0;
@@ -269,6 +302,7 @@ inline std::vector<double> gen_d5_zerocross_3d(size_t nx, size_t ny, size_t nz) 
     return d;
 }
 
+// D6 3D: exponential along linearized index, base lowered for better 3D range.
 inline std::vector<double> gen_d6_exp_3d(size_t nx, size_t ny, size_t nz) {
     std::vector<double> d(nx * ny * nz);
     double base = 1.015;
