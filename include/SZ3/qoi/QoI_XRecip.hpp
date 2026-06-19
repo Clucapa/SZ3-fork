@@ -22,6 +22,13 @@ public:
         return 1.0 / static_cast<double>(val);
     }
 
+    bool check_comply(T orig, T dec) const override {
+        if (orig == static_cast<T>(0)) return dec == static_cast<T>(0);
+        if (dec == static_cast<T>(0)) return false;
+        return std::fabs(1.0 / static_cast<double>(orig)
+                       - 1.0 / static_cast<double>(dec)) <= tol_;
+    }
+
     std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(
             const Config &conf) override {
         return std::make_unique<PointwiseEBProvider<T>>(
