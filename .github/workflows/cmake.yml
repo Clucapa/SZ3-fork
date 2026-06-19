@@ -44,6 +44,7 @@ jobs:
       run_build: ${{ steps.parse.outputs.run_build }}
       run_test: ${{ steps.parse.outputs.run_test }}
       run_full: ${{ steps.parse.outputs.run_full }}
+      run_compose: ${{ steps.parse.outputs.run_compose }}
     steps:
       - name: Extract [build] / [test] / [full] from commit message
         id: parse
@@ -55,17 +56,20 @@ jobs:
           run_build=false
           run_test=false
           run_full=false
+          run_compose=false
           for word in $BRACKET; do
             case "$word" in
-              build) run_build=true ;;
-              test)  run_build=true; run_test=true ;;
-              full)  run_build=true; run_test=true; run_full=true ;;
-              *)     echo "::error::Unknown CI keyword: $word"; exit 1 ;;
+              build)   run_build=true ;;
+              test)    run_build=true; run_test=true ;;
+              full)    run_build=true; run_test=true; run_full=true ;;
+              compose) run_build=true; run_test=true; run_compose=true ;;
+              *)       echo "::error::Unknown CI keyword: $word"; exit 1 ;;
             esac
           done
           echo "run_build=$run_build" >> "$GITHUB_OUTPUT"
           echo "run_test=$run_test" >> "$GITHUB_OUTPUT"
           echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
+          echo "run_compose=$run_compose" >> "$GITHUB_OUTPUT"
 
   build-linux:
     name: Build (Linux)
@@ -90,13 +94,24 @@ jobs:
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel 4
 
       - name: Run e2e tests (fast)
-        if: needs.parse-commit.outputs.run_test == 'true' && needs.parse-commit.outputs.run_full != 'true'
+        if: needs.parse-commit.outputs.run_test == 'true' && needs.parse-commit.outputs.run_full != 'true' && needs.parse-commit.outputs.run_compose != 'true'
         run: |
           cd build
           if ctest --output-on-failure; then
             echo "All e2e tests passed"
           else
             echo "::error::End-to-end tests failed"
+            exit 1
+          fi
+
+      - name: Run e2e tests (compose)
+        if: needs.parse-commit.outputs.run_compose == 'true'
+        run: |
+          cd build
+          if ctest -R e2e_compose --output-on-failure; then
+            echo "All compose tests passed"
+          else
+            echo "::error::Compose tests failed"
             exit 1
           fi
 
