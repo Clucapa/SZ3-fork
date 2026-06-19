@@ -1,4 +1,4 @@
-// QoI_FX — arbitrary-function QOI via TinyExpr bytecode.
+// QoI_FX -- arbitrary-function QOI via TinyExpr bytecode.
 // Activated when (conf.qoi >> 28) & 0xF == 7 (high nibble marker from encoder).
 // conf.qoiParams is base64-decoded BEFORE construction; the constructor receives
 // the raw binary payload: [len_f|f_str|len_df|df_str|len_ddf|ddf_str].

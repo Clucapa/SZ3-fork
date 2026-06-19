@@ -1,4 +1,4 @@
-// qoi_encoder CLI — thin wrapper around encode.hpp (nibble) and fx_encode.hpp (FX).
+// qoi_encoder CLI -- thin wrapper around encode.hpp (nibble) and fx_encode.hpp (FX).
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
             "  nibble mode: lin sqr cubic sqrt exp xlogx log recip abs sin tanh pow\n"
             "               Operators: + SumQoI, @ Compose, | MultiQoI\n"
 #ifdef QOI_ENCODER_HAS_FX
-            "  FX mode:     fx(\"sin(x)+x^2\") — arbitrary math expression\n"
+            "  FX mode:     fx(\"sin(x)+x^2\") -- arbitrary math expression\n"
 #endif
             , argv[0]);
         return 1;

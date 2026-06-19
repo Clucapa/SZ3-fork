@@ -1,6 +1,6 @@
 // Encoder roundtrip test cases.
 // Each entry: an expression string. At runtime encode() produces qoi+qoiParams,
-// fed to the compressor. Verification uses hardcoded feval — independent of both.
+// fed to the compressor. Verification uses hardcoded feval -- independent of both.
 // For MultiQoI, feval2 checks the second group's constraint.
 
 #ifndef SZ3_TEST_ENCODER_TESTS_HPP

@@ -559,7 +559,7 @@ TEST(EndToEnd, ComposeSinOfSquareCompressDecompress) {
     Config conf(n);
     conf.qEB = 0.3;
     conf.absErrorBound = 0.5;
-    conf.qoi = 0x19E;  // Compose(XSin, X2) = sin(x²) — bounded, no overflow
+    conf.qoi = 0x19E;  // Compose(XSin, X2) = sin(x²) -- bounded, no overflow
     conf.quantbinCnt = 65536;
     conf.qR = 12;
 

@@ -1,4 +1,4 @@
-// qoi_encoder core logic — reusable by both CLI and test harness.
+// qoi_encoder core logic -- reusable by both CLI and test harness.
 //
 // Usage:
 //   #include "encode.hpp"

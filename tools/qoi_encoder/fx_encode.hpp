@@ -1,4 +1,4 @@
-// FX encoder — SymEngine parse → differentiate → AST→TinyExpr strings → verify → base64.
+// FX encoder -- SymEngine parse → differentiate → AST→TinyExpr strings → verify → base64.
 // TinyExpr is compiled as C (tinyexpr.o), linked with the encoder only.
 
 #ifndef QOI_ENCODER_FX_ENCODE_HPP

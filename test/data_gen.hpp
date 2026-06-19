@@ -168,7 +168,7 @@ inline std::vector<double> gen_d3_sinusoid_2d(size_t nx, size_t ny, unsigned see
     return d;
 }
 
-// D4 2D: quadrant split — top-left = 0.1, rest = 1000.
+// D4 2D: quadrant split -- top-left = 0.1, rest = 1000.
 inline std::vector<double> gen_d4_cliff_2d(size_t nx, size_t ny) {
     std::vector<double> d(nx * ny);
     size_t hx = nx / 2, hy = ny / 2;
@@ -272,7 +272,7 @@ inline std::vector<double> gen_d3_sinusoid_3d(size_t nx, size_t ny, size_t nz, u
     return d;
 }
 
-// D4 3D: octant split — low octant = 0.1, rest = 1000.
+// D4 3D: octant split -- low octant = 0.1, rest = 1000.
 inline std::vector<double> gen_d4_cliff_3d(size_t nx, size_t ny, size_t nz) {
     std::vector<double> d(nx * ny * nz);
     size_t hx = nx / 2, hy = ny / 2, hz = nz / 2;

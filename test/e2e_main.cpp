@@ -1,5 +1,5 @@
 // SZ3 end-to-end QOI compliance test driver.
-// All QOI verification uses hardcoded f(x) functions — independent of
+// All QOI verification uses hardcoded f(x) functions -- independent of
 // qoi->eval / check_comply, catching bugs in encoder, compressor, and QOI classes.
 //
 // Usage: ./e2e [--fast] [--compose] [--interp-only] [--block-only] [--verbose]
@@ -87,7 +87,7 @@ static const char *algo_name(int algo, uint8_t interp_algo) {
 }
 
 // ============================================================================
-//  QOI matrix test — all verification uses hardcoded feval
+//  QOI matrix test -- all verification uses hardcoded feval
 // ============================================================================
 
 static TestResult run_qoi_test(const QoiDef &qd, uint N, int algo, uint8_t interp_algo,

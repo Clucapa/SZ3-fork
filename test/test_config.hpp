@@ -2,7 +2,7 @@
 #define SZ3_TEST_CONFIG_HPP
 
 // QOI registry and Config factory for the e2e test suite.
-// Every QOI has a hardcoded feval function — independent of qoi->eval / check_comply.
+// Every QOI has a hardcoded feval function -- independent of qoi->eval / check_comply.
 // For regional QOIs, feval = nullptr; aggregate verification is done separately.
 
 #include <string>
@@ -40,7 +40,7 @@ static double h_xpow(double x)         { return x * x; }       // default expo =
 static double h_sum_xcubic_x2(double x) { return h_xcubic(x) + h_x2(x); }
 static double h_comp_exp_x2(double x)   { return std::exp(x * x); }
 
-// MultiQoI group check helpers — each group has its own hardcoded eval.
+// MultiQoI group check helpers -- each group has its own hardcoded eval.
 // The compressor must satisfy ALL groups simultaneously.
 static double h_multi_sqrt(double x)  { return h_xsqrt(x); }
 static double h_multi_x2(double x)    { return h_x2(x); }

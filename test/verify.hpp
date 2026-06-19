@@ -1,4 +1,4 @@
-// Shared verification helpers — all QOI checks use hardcoded f(x) only.
+// Shared verification helpers -- all QOI checks use hardcoded f(x) only.
 
 #ifndef SZ3_TEST_VERIFY_HPP
 #define SZ3_TEST_VERIFY_HPP

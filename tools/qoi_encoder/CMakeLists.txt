@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 99)
 
-# TinyExpr — C source, compiled as C
+# TinyExpr -- C source, compiled as C
 add_library(tinyexpr_c tinyexpr.c)
 target_include_directories(tinyexpr_c PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
