@@ -43,8 +43,9 @@ jobs:
     outputs:
       run_build: ${{ steps.parse.outputs.run_build }}
       run_test: ${{ steps.parse.outputs.run_test }}
+      run_full: ${{ steps.parse.outputs.run_full }}
     steps:
-      - name: Extract [build] / [test] from commit message
+      - name: Extract [build] / [test] / [full] from commit message
         id: parse
         env:
           MSG: ${{ github.event.head_commit.message }}
@@ -53,15 +54,18 @@ jobs:
           BRACKET=$(echo "$MSG" | grep -oP '\[[^\]]*\]\s*$' | sed 's/.*\[\(.*\)\].*/\1/' | xargs)
           run_build=false
           run_test=false
+          run_full=false
           for word in $BRACKET; do
             case "$word" in
               build) run_build=true ;;
               test)  run_build=true; run_test=true ;;
+              full)  run_build=true; run_test=true; run_full=true ;;
               *)     echo "::error::Unknown CI keyword: $word"; exit 1 ;;
             esac
           done
           echo "run_build=$run_build" >> "$GITHUB_OUTPUT"
           echo "run_test=$run_test" >> "$GITHUB_OUTPUT"
+          echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
 
   build-linux:
     name: Build (Linux)
@@ -85,8 +89,8 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel 4
 
-      - name: Run end-to-end tests
-        if: needs.parse-commit.outputs.run_test == 'true'
+      - name: Run e2e tests (fast)
+        if: needs.parse-commit.outputs.run_test == 'true' && needs.parse-commit.outputs.run_full != 'true'
         run: |
           cd build
           if ctest --output-on-failure; then
@@ -95,3 +99,13 @@ jobs:
             echo "::error::End-to-end tests failed"
             exit 1
           fi
+
+      - name: Run e2e tests (full)
+        if: needs.parse-commit.outputs.run_full == 'true'
+        run: |
+          ./test/bin/e2e --full
+          if [ $? -ne 0 ]; then
+            echo "::error::Full end-to-end tests failed"
+            exit 1
+          fi
+          echo "All full e2e tests passed"
