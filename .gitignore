@@ -11,7 +11,8 @@ install
 .vscode
 sz3_install
 sz3_build
-/test/
+/test/bin/
+/test/lib/
 QoZ_note
 
 CMakeSettings.json

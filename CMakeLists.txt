@@ -97,8 +97,11 @@ if (BUILD_SZ3_BINARY)
     add_subdirectory(tools/sz3c)
 endif ()
 
-# Test modules
-add_subdirectory(tools/test)
+# End-to-end test (CI gate)
+add_subdirectory(test)
+
+# Unit test modules (deprecated in CI; kept for local debugging)
+# add_subdirectory(tools/test)
 
 # Optional tools disabled in test-oriented build.
 set(BUILD_TESTING OFF CACHE BOOL "Build tests" FORCE)

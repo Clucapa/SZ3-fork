@@ -49,6 +49,7 @@ public:
         init();
 
         auto eb_provider = qoi->create_eb_provider(conf);
+        eb_provider->precompress_block(num_elements);
 
         std::vector<int> qebs, qds;
         qebs.reserve(num_elements);
@@ -57,9 +58,20 @@ public:
         double eb = static_cast<double>(qoi->get_geb());
 
         if (anchor_stride == 0) {
-            T eb_val = static_cast<T>(eb);
+            T orig_val = *data;
+            T eb_val = qoi->interpret_eb(orig_val);
             int qe = qnt.qnt_eb(eb_val);
             int qd = qnt.qnt_overwrite(*data, static_cast<T>(0), eb_val);
+            if (!qoi->check_comply(orig_val, *data)) {
+                *data = orig_val;
+                qe = qnt.qnt_eb(eb_val = static_cast<T>(0));
+                if (qd != 0) {
+                    qd = qnt.qnt_overwrite(*data, static_cast<T>(0), static_cast<T>(0));
+                }
+            }
+            if (!qoi->is_pointwise()) {
+                eb_provider->advance(orig_val, *data);
+            }
             qebs.push_back(qe);
             qds.push_back(qd);
         } else {
@@ -86,10 +98,20 @@ public:
 
             auto quantize_func = [&](size_t, T &d, T pred) {
                 T orig_val = d;
-                T eb_raw = eb_provider->advance(orig_val, d);
+                T eb_raw = qoi->interpret_eb(orig_val);
                 T point_eb = std::min(eb_raw, static_cast<T>(cur_eb));
                 int qe = qnt.qnt_eb(point_eb);
                 int qd = qnt.qnt_overwrite(d, pred, point_eb);
+                if (!qoi->check_comply(orig_val, d)) {
+                    d = orig_val;
+                    qe = qnt.qnt_eb(point_eb = static_cast<T>(0));
+                    if (qd != 0) {
+                        qd = qnt.qnt_overwrite(d, static_cast<T>(0), static_cast<T>(0));
+                    }
+                }
+                if (!qoi->is_pointwise()) {
+                    eb_provider->advance(orig_val, d);
+                }
                 qebs.push_back(qe);
                 qds.push_back(qd);
             };
@@ -131,6 +153,7 @@ public:
         init();
 
         auto eb_provider = qoi->create_eb_provider(conf);
+        eb_provider->precompress_block(num_elements);
 
         double eb = static_cast<double>(qoi->get_geb());
 
@@ -139,7 +162,9 @@ public:
             int qd = qds[quant_index];
             T recv_eb = qnt.recv_eb(qe);
             *dec_data = qnt.recv(static_cast<T>(0), qd, recv_eb);
-            eb_provider->advance();
+            if (!qoi->is_pointwise()) {
+                eb_provider->advance();
+            }
             quant_index++;
         } else {
             recover_anchor_grid(dec_data, qebs, qds);
@@ -168,7 +193,9 @@ public:
                 int qd = qds[quant_index];
                 T recv_eb = qnt.recv_eb(qe);
                 d = qnt.recv(pred, qd, recv_eb);
-                eb_provider->advance();
+                if (!qoi->is_pointwise()) {
+                    eb_provider->advance();
+                }
                 quant_index++;
             };
 

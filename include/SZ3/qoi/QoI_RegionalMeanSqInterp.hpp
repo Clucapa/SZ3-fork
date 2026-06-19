@@ -2,6 +2,7 @@
 #define SZ3_QOI_REGIONAL_MEAN_SQ_INTERP_HPP
 
 #include <algorithm>
+#include <cmath>
 #include "SZ3/def.hpp"
 #include "SZ3/qoi/QoI.hpp"
 #include "SZ3/qoi/EBProvider.hpp"
@@ -19,17 +20,28 @@ public:
         concepts::QoIIf<T, N>::id = ~3;
     }
 
-    T interpret_eb(T) const override {
-        return geb_;
+    T interpret_eb(T x) const override {
+        if (rest_elements_ <= 0) return geb_;
+        double eb_sq = (aggregated_tolerance_ - fabs(error_)) / rest_elements_;
+        T eb = -fabs(x) + sqrt(x * x + eb_sq);
+        return std::min(eb, geb_);
     }
 
     bool check_comply(T, T) const override {
         return true;
     }
 
-    void precompress_block(size_t) override {}
+    void precompress_block(size_t num_elements) override {
+        rest_elements_ = static_cast<int>(num_elements);
+        block_elements_ = static_cast<int>(num_elements);
+        aggregated_tolerance_ = tol_ * num_elements;
+        error_ = 0;
+    }
 
-    void update_tolerance(T, T) override {}
+    void update_tolerance(T orig, T dec) override {
+        error_ += static_cast<double>(orig) * orig - static_cast<double>(dec) * dec;
+        rest_elements_--;
+    }
 
     void postcompress_block() override {}
 
@@ -50,6 +62,10 @@ public:
 private:
     double tol_;
     T geb_;
+    double error_ = 0;
+    int rest_elements_ = 0;
+    int block_elements_ = 0;
+    double aggregated_tolerance_ = 0;
 };
 
 template <typename T, uint N>
@@ -67,6 +83,7 @@ public:
 
     T advance(T orig, T dec) override {
         T eb = qoi_->interpret_eb(orig);
+        qoi_->update_tolerance(orig, dec);
         pos_++;
         return eb;
     }
@@ -74,6 +91,7 @@ public:
     void advance() override { pos_++; }
 
     void reset() override {
+        qoi_->precompress_block(0);
         pos_ = 0;
     }
 

@@ -32,13 +32,20 @@ TEST(QoI_RegionalAvgInterp, UpdateToleranceNoOp) {
 TEST(QoI_RegionalMeanSqInterp, ReturnsGeb) {
     QoI_RegionalMeanSqInterp<float, 1> qoi(1.0, 10.0f);
     EXPECT_EQ(qoi.id, ~3);
-    EXPECT_FLOAT_EQ(qoi.interpret_eb(3.0f), 10.0f);
+    qoi.precompress_block(10);
+    float eb = qoi.interpret_eb(3.0f);
+    EXPECT_GT(eb, 0.0f);
+    EXPECT_LE(eb, 10.0f);
 }
 
 TEST(QoI_RegionalMeanSqInterp, UpdateToleranceNoOp) {
     QoI_RegionalMeanSqInterp<float, 1> qoi(1.0, 5.0f);
-    qoi.update_tolerance(2.0f, 1.9f);
-    EXPECT_FLOAT_EQ(qoi.interpret_eb(2.0f), 5.0f);
+    qoi.precompress_block(10);
+    float eb_before = qoi.interpret_eb(2.0f);
+    EXPECT_LT(eb_before, 5.0f);  // budget tracking produces smaller eb
+    qoi.update_tolerance(2.0f, 1.0f);  // introduce larger error
+    float eb_after = qoi.interpret_eb(2.0f);
+    EXPECT_LT(eb_after, eb_before);  // budget consumed, eb should shrink
 }
 
 // ---- EBProvider Tests ----
@@ -94,7 +101,8 @@ TEST(RegionalMeanSqInterpEBProvider, AdvanceReturnsGeb) {
 
     provider.precompress_block(5);
     float eb = provider.advance(2.0f, 1.9f);
-    EXPECT_FLOAT_EQ(eb, 5.0f);
+    EXPECT_GT(eb, 0.0f);
+    EXPECT_LE(eb, 5.0f);  // capped by geb
 }
 
 // ---- Decomposition: 1D Interp Compress/Decompress Round-Trip ----

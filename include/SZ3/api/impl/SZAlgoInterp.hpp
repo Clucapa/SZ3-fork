@@ -194,7 +194,7 @@ size_t SZ_compress_Interp_lorenzo(Config &conf, T *data, uchar *cmpData, size_t 
 
     if (!to_tune) {  // if the sampled data would be too many (currently it is 5% of the input), skip the tuning
         conf.cmprAlgo = ALGO_INTERP;
-        return SZ_compress_Interp<T, N>(conf, data, cmpData, cmpCap);
+        return SZ_compress_Interp_qpet<T, N>(conf, data, cmpData, cmpCap);
     }
     std::vector<std::vector<T>> sampled_blocks;
     size_t per_block_ele_num = pow(sampleBlockSize + 1, N);
@@ -212,7 +212,7 @@ size_t SZ_compress_Interp_lorenzo(Config &conf, T *data, uchar *cmpData, size_t 
 
     if (sampling_num == 0 || sampling_num >= conf.num * 0.2) {
         conf.cmprAlgo = ALGO_INTERP;
-        return SZ_compress_Interp<T, N>(conf, data, cmpData, cmpCap);
+        return SZ_compress_Interp_qpet<T, N>(conf, data, cmpData, cmpCap);
     }
     double best_lorenzo_ratio = 0, best_interp_ratio = 0, ratio;
     size_t bufferCap = conf.num * sizeof(T);
@@ -284,7 +284,7 @@ size_t SZ_compress_Interp_lorenzo(Config &conf, T *data, uchar *cmpData, size_t 
     size_t cmpSize = 0;
     if (useInterp) {
         conf.cmprAlgo = ALGO_INTERP;
-        cmpSize = SZ_compress_Interp<T, N>(conf, data, cmpData, cmpCap);
+        cmpSize = SZ_compress_Interp_qpet<T, N>(conf, data, cmpData, cmpCap);
     } else {
         // no need to tune lorenzo for 3D anymore
         // if (N == 3) {
