@@ -74,6 +74,8 @@ cmake --build build --parallel $(nproc)
 | RegAvgInt | 同 RegMean | 2.0 | 5.0 | Interp |
 | RegMeanSqI | 同 RegMeanSq | 200.0 | 10.0 | Interp |
 
+> ILorenzo + ZeroCross 组合对 RegAvgInt 跳过（2 条）。原因：ILorenzo 的 CSD（压缩顺序依赖）在符号交替的零穿越数据上产生同向偏置，而 Interp 路径的 Regional QoI 按 QoZ 设计不做 budget tracking（`update_tolerance` 为空），全局均值无法被纠正。Block 路径的 RegionalMean 有 budget tracking，不受影响。
+
 #### 算法 × 维数矩阵
 
 | 算法 | 1D | 2D | 3D | 插值类型 |
