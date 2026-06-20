@@ -16,6 +16,9 @@ size_t SZ_compress_dispatcher(Config &conf, const T *data, uchar *cmpData, size_
     calAbsErrorBound(conf, data);
 
     auto qoi = GetQOI<T, N>(conf);
+    if (qoi && qoi->has_bias()) {
+        qoi->precompute_data(data, conf.num);
+    }
     if (qoi && qoi->is_pointwise()) {
         conf.ebs.resize(conf.num);
         for (size_t i = 0; i < conf.num; ++i)
@@ -34,6 +37,10 @@ size_t SZ_compress_dispatcher(Config &conf, const T *data, uchar *cmpData, size_
     if (conf.cmprAlgo != ALGO_LOSSLESS) {
         try {
             std::vector<T> dataCopy(data, data + conf.num);
+            if (qoi && qoi->has_bias()) {
+                for (size_t i = 0; i < conf.num; ++i)
+                    dataCopy[i] += qoi->get_bias(i);
+            }
             if (conf.cmprAlgo == ALGO_LORENZO_REG) {
                 cmpSize = SZ_compress_LorenzoReg<T, N>(conf, dataCopy.data(), cmpData, cmpCap);
             } else if (conf.cmprAlgo == ALGO_INTERP) {

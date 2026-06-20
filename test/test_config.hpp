@@ -39,6 +39,7 @@ static double h_xpow(double x)         { return x * x; }       // default expo =
 
 static double h_sum_xcubic_x2(double x) { return h_xcubic(x) + h_x2(x); }
 static double h_comp_exp_x2(double x)   { return std::exp(x * x); }
+static double h_comp_sqr_exp(double x)  { double e = std::exp(x); return e * e; }
 
 // MultiQoI group check helpers -- each group has its own hardcoded eval.
 // The compressor must satisfy ALL groups simultaneously.
@@ -80,10 +81,10 @@ inline const QoiDef *all_qois() {
         {0x1F3,"MultiQoI","sqrt|sqr",       DOM_UNRESTRICTED, false, 1.0,  10.0, h_multi_sqrt,    h_multi_x2, 1.0, 100.0, 0},
         {0x14E,"Compose", "exp@sqr",        DOM_UNRESTRICTED, false, 1.0,  10.0, h_comp_exp_x2,   nullptr,    0, 0, 0},
         // ---- regional ----
-        {~0,   "RegMean",   nullptr,        DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr, nullptr, 0, 0, 0},
-        {~1,   "RegMeanSq", nullptr,        DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr, nullptr, 0, 0, 0},
-        {~2,   "RegAvgInt", nullptr,        DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr, nullptr, 0, 0, 0},
-        {~3,   "RegMeanSqI",nullptr,        DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr, nullptr, 0, 0, 0},
+        {~0,   "RegMean",   nullptr,        DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr,           nullptr, 0, 0, 0},
+        {~1,   "RegMeanSq", nullptr,        DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr,           nullptr, 0, 0, 0},
+        {~0x12,"RegSum",    "sqr+cubic",    DOM_UNRESTRICTED, true,  2.0,   10.0, h_sum_xcubic_x2,   nullptr, 0, 100.0, 0},
+        {~0xE14,"RegCompose","sqr@exp",     DOM_UNRESTRICTED, true,  1.0,   10.0, h_comp_sqr_exp,    nullptr, 0, 5.0,   0},
     };
     return list;
 }
@@ -142,18 +143,24 @@ inline bool data_ok_for_qoi(const QoiDef &qd, const std::vector<double> &data) {
 }
 
 // Regional aggregate constraint (hardcoded, independent of qoi->eval).
+// Uses qd.feval when provided; falls back to id-based mean / mean-of-squares.
 inline bool check_regional_aggregate(const QoiDef &qd, size_t n,
                                       const double *orig, const double *dec,
                                       double *agg_val) {
     double sum_err = 0.0;
-    int rid = ~qd.id;
-    if (rid == 0 || rid == 2) {
-        for (size_t i = 0; i < n; ++i) sum_err += orig[i] - dec[i];
-        *agg_val = std::fabs(sum_err) / n;
+    if (qd.feval) {
+        for (size_t i = 0; i < n; ++i)
+            sum_err += qd.feval(orig[i]) - qd.feval(dec[i]);
     } else {
-        for (size_t i = 0; i < n; ++i) sum_err += orig[i] * orig[i] - dec[i] * dec[i];
-        *agg_val = std::fabs(sum_err) / n;
+        int rid = ~qd.id;
+        if (rid == 0) {
+            for (size_t i = 0; i < n; ++i) sum_err += orig[i] - dec[i];
+        } else {
+            for (size_t i = 0; i < n; ++i)
+                sum_err += orig[i] * orig[i] - dec[i] * dec[i];
+        }
     }
+    *agg_val = std::fabs(sum_err) / n;
     return *agg_val <= qd.qEB * (1.0 + 1e-8);
 }
 

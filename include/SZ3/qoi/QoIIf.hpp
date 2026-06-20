@@ -23,6 +23,7 @@
 #include "SZ3/qoi/QoI_MultiQoI.hpp"
 #include "SZ3/qoi/QoI_Compose.hpp"
 #include "SZ3/qoi/QoI_FX.hpp"
+#include "SZ3/qoi/QoI_Conv.hpp"
 #include "SZ3/qoi/QoI_IsolineNibble.hpp"
 #include "SZ3/qoi/RegionalNibble.hpp"
 #include "SZ3/utils/Config.hpp"
@@ -223,6 +224,34 @@ std::shared_ptr<concepts::QoIIf<T, N>> assemble_isoline_nibble(const Config &con
     return std::make_shared<QoI_MultiQoI<T, N>>(std::move(grp_vec));
 }
 
+struct ConvConfig {
+    std::vector<double> kernel;
+    double conv_tol;
+};
+
+inline ConvConfig parse_conv_config(const Config &conf, int raw) {
+    ConvConfig cfg;
+    cfg.conv_tol = 0;
+    int dim = (raw >> 24) & 0xF;
+    int ksz[3] = {raw & 0xFF, (raw >> 8) & 0xFF, (raw >> 16) & 0xFF};
+    int total_w = 1;
+    for (int d = 0; d < dim; ++d) total_w *= ksz[d];
+
+    auto &bytes = conf.qoiParams;
+    size_t pos = 0;
+    auto read_d = [&]() -> double {
+        if (pos + 8 > bytes.size()) return 0;
+        double v;
+        std::memcpy(&v, bytes.data() + pos, 8);
+        pos += 8;
+        return v;
+    };
+    for (int i = 0; i < total_w; ++i)
+        cfg.kernel.push_back(read_d());
+    cfg.conv_tol = read_d();
+    return cfg;
+}
+
 }  // namespace detail
 
 template <class T, uint N>
@@ -237,11 +266,15 @@ std::shared_ptr<concepts::QoIIf<T, N>> GetQOI(const Config &conf) {
 
     if (conf.qoi < 0) {
         int raw = ~conf.qoi;
+
+        if (((raw >> 28) & 0xF) == 7) {
+            auto cfg = detail::parse_conv_config(conf, raw);
+            return std::make_shared<QoI_Conv<T, N>>(
+                conf.qEB, conf.absErrorBound, cfg.kernel, cfg.conv_tol);
+        }
+
         bool use_fx = ((raw >> 28) & 0x3) == 0x3;
         int nib_qoi = raw & 0x0FFFFFFF;
-
-        if (!use_fx && raw < 4)
-            nib_qoi = raw & 1;
 
         if (use_fx) {
             auto fx = std::make_shared<QoI_FX<T, N>>(
@@ -257,7 +290,7 @@ std::shared_ptr<concepts::QoIIf<T, N>> GetQOI(const Config &conf) {
         detail::ParamReader params(conf.qoiParams);
         auto sub = groups.size() == 1
             ? detail::assemble_group<T, N>(groups[0], params, conf.qEB, conf.absErrorBound)
-            : detail::assemble_from_nibbles<T, N>(conf);  // fallback for multi-group
+            : detail::assemble_from_nibbles<T, N>(conf);
 
         if (!sub)
             sub = std::make_shared<QoI_XLin<T, N>>(conf.qEB, conf.absErrorBound);

@@ -1,6 +1,6 @@
 # SZ3 QPET 测试文档
 
-**所有 pointwise QoI 和 Isoline 测试均通过外部 `qoi_encoder` 二进制统一编码**（nibble 优先，失败回落 SymEngine FX）。仅 Regional QoI 使用 hardcoded id。encoder 二进制路径统一通过 `--encoder-path` 指定。
+所有 QoI 测试均通过外部 `qoi_encoder` 二进制统一编码。encoder 二进制路径统一通过 `--encoder-path` 指定。
 
 ## 编译
 
@@ -9,75 +9,74 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel $(nproc)
 ```
 
-依赖：CMake ≥ 3.14、C++17、zstd。GTest 自动拉取 v1.16.0。
+依赖：CMake ≥ 3.14、C++17、zstd。
 
 ## e2e 测试 CLI
-
-所有 pointwise QoI 测试均通过外部 `qoi_encoder` 二进制编码表达式（nibble 优先，失败后自动回落 FX）。Regional QoI 使用 hardcoded id。
 
 ```bash
 # 基础门禁（QOI 矩阵 + 剪枝，约 1s）
 ./test/bin/e2e --basic --encoder-path=./test/bin/qoi_encoder
 
-# 全量测试（QOI 矩阵 + 编码器往返 + Isoline + Regional，约 2min）
+# 全量（全部测试，约 2min）
 ./test/bin/e2e --full --encoder-path=./test/bin/qoi_encoder
 
-# 仅 Isoline
-./test/bin/e2e --isoline --encoder-path=./test/bin/qoi_encoder
+# 分项测试
+./test/bin/e2e --compose --encoder-path=./test/bin/qoi_encoder      # 编码器往返
+./test/bin/e2e --isoline --encoder-path=./test/bin/qoi_encoder      # Isoline
+./test/bin/e2e --regional --encoder-path=./test/bin/qoi_encoder     # Regional
+./test/bin/e2e --conv --encoder-path=./test/bin/qoi_encoder         # Convolution
 
-# 仅 Regional
-./test/bin/e2e --regional --encoder-path=./test/bin/qoi_encoder
-
-# 仅编码器往返（自定义参数 + FX + Iso6）
-./test/bin/e2e --compose --encoder-path=./test/bin/qoi_encoder
-
-# 仅 Block / Interp 算法
+# 算法筛选
 ./test/bin/e2e --block-only --encoder-path=./test/bin/qoi_encoder
 ./test/bin/e2e --interp-only --encoder-path=./test/bin/qoi_encoder
+
+# 调试
+./test/bin/e2e --debug --regional --encoder-path=./test/bin/qoi_encoder
 ```
 
 ## CI 触发
 
 | 关键字 | 效果 |
 |--------|------|
-| (无标签) | 仅检查非 ASCII 字符 |
-| `[build]` | Linux 编译 |
-| `[test]` | 编译 + `e2e --full --encoder-path=./test/bin/qoi_encoder`（1860 条，约 2min） |
+| `[test]` | 编译 + `e2e --basic --encoder-path=./test/bin/qoi_encoder` |
+| `[full]` | 编译 + `e2e --full --encoder-path=./test/bin/qoi_encoder` |
+
+---
 
 ## 测试覆盖清单
 
-### 一、QOI 矩阵测试（`e2e --full`，15 pointwise × 8 模式 × 3 维 × 5 算法 + 4 regional = 1860 条）
+### 一、QOI 矩阵测试（19 QoI × 3 维 × 8 模式 × 3 算法）
 
-所有 pointwise QoI 经 encoder 统一编码。Regional 使用 hardcoded id。
+所有 pointwise QoI 经 encoder 统一编码。Regional 也通过 encoder `--regional` 编码。
 
-| QoI | 表达式 | f(x) | qEB | absEB | Domain | max_data |
-|-----|--------|------|-----|-------|--------|----------|
-| XLin | `lin` | x | 1.0 | 10.0 | 全域 | 0 |
-| X2 | `sqr` | x² | 1.0 | 10.0 | 全域 | 100 |
-| XCubic | `cubic` | x³ | 1.0 | 10.0 | 全域 | 100 |
-| XSqrt | `sqrt` | √x | 0.1 | 5.0 | x≥0 | 0 |
-| XExp | `exp` | eˣ | 1.0 | 10.0 | 全域 | 5 |
-| XLogX | `xlogx` | x·log(x) | 1.0 | 10.0 | x>0 | 0 |
-| LogX | `log` | log(x) | 0.1 | 5.0 | x>0 | 0 |
-| XRecip | `recip` | 1/x | 1.0 | 10.0 | x≠0 | 0 |
-| XAbs | `abs` | \|x\| | 1.0 | 10.0 | 全域 | 0 |
-| XSin | `sin` | sin(x) | 0.1 | 5.0 | 全域 | 0 |
-| XTanh | `tanh` | tanh(x) | 0.1 | 5.0 | 全域 | 0 |
-| XPower | `pow` | x² | 1.0 | 10.0 | 全域 | 100 |
-| SumQoI | `sqr+cubic` | x²+x³ | 1.0 | 10.0 | 全域 | 100 |
-| MultiQoI | `sqrt\|sqr` | √x & x² | 1.0/1.0 | 10.0 | 全域 | 100 |
-| Compose | `exp@sqr` | e^(x²) | 1.0 | 10.0 | 全域 | 0 |
+#### Pointwise（15 个）
 
-#### Regional（4 个，不使用 encoder）
+| QoI | 表达式 | f(x) | qEB | max_data | Domain |
+|-----|--------|------|-----|----------|--------|
+| XLin | `lin` | x | 1.0 | 0 | 全域 |
+| X2 | `sqr` | x² | 1.0 | 100 | 全域 |
+| XCubic | `cubic` | x³ | 1.0 | 100 | 全域 |
+| XSqrt | `sqrt` | √x | 0.1 | 0 | x≥0 |
+| XExp | `exp` | eˣ | 1.0 | 5 | 全域 |
+| XLogX | `xlogx` | x·log(x) | 1.0 | 0 | x>0 |
+| LogX | `log` | log(x) | 0.1 | 0 | x>0 |
+| XRecip | `recip` | 1/x | 1.0 | 0 | x≠0 |
+| XAbs | `abs` | \|x\| | 1.0 | 0 | 全域 |
+| XSin | `sin` | sin(x) | 0.1 | 0 | 全域 |
+| XTanh | `tanh` | tanh(x) | 0.1 | 0 | 全域 |
+| XPower | `pow` | x² | 1.0 | 100 | 全域 |
+| SumQoI | `sqr+cubic` | x²+x³ | 1.0 | 100 | 全域 |
+| MultiQoI | `sqrt\|sqr` | √x & x² | 1.0/1.0 | 100 | 全域 |
+| Compose | `exp@sqr` | e^(x²) | 1.0 | 0 | 全域 |
 
-| QoI | 约束 | qEB | absEB | 路径 |
-|-----|------|-----|-------|------|
-| RegMean | \|mean(orig) - mean(dec)\| ≤ qEB | 2.0 | 5.0 | Block |
-| RegMeanSq | \|mean(orig²) - mean(dec²)\| ≤ qEB | 200.0 | 10.0 | Block |
-| RegAvgInt | 同 RegMean | 2.0 | 5.0 | Interp |
-| RegMeanSqI | 同 RegMeanSq | 200.0 | 10.0 | Interp |
+#### Regional（4 个）
 
-> ILorenzo + ZeroCross 组合对 RegAvgInt 跳过（2 条）。原因：ILorenzo 的 CSD（压缩顺序依赖）在符号交替的零穿越数据上产生同向偏置，而 Interp 路径的 Regional QoI 按 QoZ 设计不做 budget tracking（`update_tolerance` 为空），全局均值无法被纠正。Block 路径的 RegionalMean 有 budget tracking，不受影响。
+| QoI | 表达式 | 聚合约束 | qEB | max_data |
+|-----|--------|---------|-----|----------|
+| RegMean | `--regional` (hardcoded ~0) | avg(x-orig − x-dec) | 2.0 | 0 |
+| RegMeanSq | `--regional` (hardcoded ~1) | avg(x²-orig − x²-dec) | 200.0 | 0 |
+| RegSum | `--regional sqr+cubic` | avg(f-orig − f-dec), f=x²+x³ | 2.0 | 100 |
+| RegCompose | `--regional sqr@exp` | avg((eˣ)²-orig − (eˣ)²-dec) | 1.0 | 5 |
 
 #### 算法 × 维数矩阵
 
@@ -91,115 +90,119 @@ cmake --build build --parallel $(nproc)
 
 ---
 
-### 二、编码器往返测试（`e2e --compose`，37 表达式 × 2 模式 × 2 算法 = 148 条）
+### 二、编码器往返测试（24 表达式 × 2 模式 × 2 算法）
 
-通过外部 `qoi_encoder` 编码为 `(qoi, qoiParams)`，feed 给压缩器后验证 QoI 合规。数据模式为 Ramp (0→100) 和 Sinusoid (~12–88)，算法为 Block + Interp-Cubic。
+通过外部 encoder 编码为 `(qoi, qoiParams)`，feed 给压缩器后验证 QoI 合规。
 
-#### Nibble 单函数（带默认/自定义参数）
+#### Nibble 单函数
 
-| 标签 | 表达式 | f(x) | qEB | Domain | 备注 |
-|------|--------|------|-----|--------|------|
-| LinDefault | `lin` | x | 1.0 | 全域 | 默认 A=1,B=0 |
-| Sqr | `sqr` | x² | 1.0 | 全域 | |
-| Cubic | `cubic` | x³ | 1.0 | 全域 | |
-| Sqrt | `sqrt` | √x | 0.1 | x≥0 | |
-| ExpDefault | `exp` | eˣ | 1.0 | 全域 | max_data=3 |
-| XLogX | `xlogx` | x·log(x) | 1.0 | x>0 | |
-| LogDefault | `log` | log(x) | 0.1 | x>0 | |
-| Recip | `recip` | 1/x | 1.0 | x≠0 | |
-| Abs | `abs` | \|x\| | 1.0 | 全域 | |
-| Sin | `sin` | sin(x) | 0.1 | 全域 | |
-| Tanh | `tanh` | tanh(x) | 0.1 | 全域 | |
-| PowDefault | `pow` | x² | 1.0 | 全域 | |
-| LinCustom | `lin(2,0.5)` | 2x+0.5 | 3.0 | 全域 | |
-| ExpCustom | `exp(3)` | 3ˣ | 1.0 | 全域 | base=3, max_data=5 |
-| LogCustom | `log(2)` | log₂x | 0.1 | x>0 | base=2 |
-| PowCustom | `pow(3.5)` | x^3.5 | 1.0 | 全域 | max_data=50 |
+| 标签 | 表达式 | f(x) | Domain | 备注 |
+|------|--------|------|--------|------|
+| LinCustom | `lin(2,0.5)` | 2x+0.5 | 全域 | |
+| ExpCustom | `exp(3)` | 3ˣ | 全域 | base=3, max_data=5 |
+| LogCustom | `log(2)` | log₂x | x>0 | base=2 |
+| PowCustom | `pow(3.5)` | x^3.5 | 全域 | max_data=50 |
 
-#### SumQoI（组内求和）
+#### SumQoI
 
-| 标签 | 表达式 | f(x) | qEB |
-|------|--------|------|-----|
-| Sum2 | `sqr+cubic` | x²+x³ | 1.0 |
-| Sum3Param | `lin(2,0.5)+exp(3)+sqr` | 2x+0.5+3ˣ+x² | 1.0 |
-| Sum3NoParam | `abs+sin+tanh` | \|x\|+sin(x)+tanh(x) | 1.0 |
-| SumLinReorder | `sqr+lin(2,0.5)` | x²+2x+0.5 | 3.0 |
+| 标签 | 表达式 | f(x) |
+|------|--------|------|
+| Sum3Param | `lin(2,0.5)+exp(3)+sqr` | 2x+0.5+3ˣ+x² |
+| Sum3NoParam | `abs+sin+tanh` | \|x\|+sin(x)+tanh(x) |
+| SumLinReorder | `sqr+lin(2,0.5)` | x²+2x+0.5 |
 
-#### MultiQoI（组间 AND）
+#### MultiQoI
 
-| 标签 | 表达式 | Group 1 | Group 2 | qEB |
-|------|--------|---------|---------|-----|
-| Multi2 | `sqr\|abs` | sqr | abs | 1.0 / 1.0 |
-| MultiSum | `sqr+cubic\|exp(3)+sin` | sqr+cubic | 3ˣ+sin | 1.0 / 1.0 |
+| 标签 | 表达式 | Group 1 | Group 2 |
+|------|--------|---------|---------|
+| Multi2 | `sqr\|abs` | sqr | abs |
+| MultiSum | `sqr+cubic\|exp(3)+sin` | sqr+cubic | 3ˣ+sin |
 
 #### Compose
 
 | 标签 | 表达式 | f(x) | 备注 |
 |------|--------|------|------|
-| CompExpSqr | `exp@sqr` | e^(x²) | max_data=30 |
 | CompAbsSin | `abs@sin` | \|sin(x)\| | |
 | CompNested | `sqrt@exp(2)@sqr` | √(2^(x²)) | 三重嵌套, max_data=3 |
 | CompExpCubic | `exp@cubic` | e^(x³) | max_data=30 |
 
 #### FX 模式（SymEngine 任意函数）
 
-| 标签 | 表达式 | f(x) | Domain |
-|------|--------|------|--------|
-| FX_SinX2 | `sin(x)+x^2` | sin(x)+x² | 全域 |
-| FX_SqrtExp | `sqrt(x)+exp(-x)` | √x+e^(-x) | x≥0 |
-| FX_X3_2X_1 | `x^3+2*x+1` | x³+2x+1 | 全域 |
+| 标签 | 表达式 | f(x) |
+|------|--------|------|
+| FX_SinX2 | `sin(x)+x^2` | sin(x)+x² |
+| FX_SqrtExp | `sqrt(x)+exp(-x)` | √x+e^(-x) |
+| FX_X3_2X_1 | `x^3+2*x+1` | x³+2x+1 |
+
+#### Isoline
+
+| 标签 | 表达式 | 子 QoI |
+|------|--------|--------|
+| Iso6Sqr | `iso6(sqr, -5, 5, 3, 0.01)` | sqr |
+| Iso6Sqrt | `iso6(sqrt, 0, 10, 3, 0.001)` | sqrt |
+| Iso6Abs | `iso6(abs, -3, 3, 3, 0.001)` | abs |
+| Iso6Cubic | `iso6(cubic, -5, 5, 3, 0.01)` | cubic |
+| Iso6Sin | `iso6(sin, -1, 1, 3, 0.001)` | sin |
+| Iso6Exp | `iso6(exp, 0, 5, 3, 0.001)` | exp |
+| Iso6Sum | `iso6(sqr+cubic, -5, 5, 3, 0.01)` | sqr+cubic |
+| Iso6Multi | `iso6(sqr,...;abs,...)` | sqr \| abs |
 
 ---
 
-### 三、Isoline 测试（`e2e --isoline` / `--full`，2 用例 × 2 维 × 8 模式 × 3 算法 = 96 条）
+### 三、Isoline 测试（2 用例 × 2 维 × 8 模式 × 3 算法）
 
-经 encoder 生成 iso6 表达式，验证等值线不穿越：
+经 encoder 生成 iso6 表达式，逐点硬编码验证等值线不穿越。
 
-| 标签 | 表达式 | 子 QoI | qEB | absEB |
-|------|--------|--------|-----|-------|
-| Iso6-XLin | `iso6(lin, -5, 5, 3, 0.01)` | lin (恒等) | 5.0 | 10.0 |
-| Iso6-X2 | `iso6(sqr, -5, 5, 3, 0.01)` | sqr (x²) | 5.0 | 10.0 |
-
-算法：Block / Interp-Cubic / Interp-Linear。维数：1D、2D。
+| 标签 | 表达式 | 子 QoI |
+|------|--------|--------|
+| Iso6-XLin | `iso6(lin, -5, 5, 3, 0.01)` | lin (恒等) |
+| Iso6-X2 | `iso6(sqr, -5, 5, 3, 0.01)` | sqr |
 
 ---
 
-### 四、Regional 新编码测试（`e2e --regional` / `--full`，7 表达式 × 1 算法 = 14 条）
+### 四、Regional 新编码测试（11 表达式 × 2 算法）
 
-通过 encoder `--regional [--interp]` 编码，验证 `|mean(f(orig)) - mean(f(dec))| ≤ qEB`：
+通过 encoder `--regional` 编码，硬编码 feval 验证聚合约束。Block 和 Interp 算法均测试。
 
-| 标签 | 表达式 | 路径 | qEB |
-|------|--------|:--:|-----|
-| RegLin | `--regional sqr` | Block | 1.0 |
-| RegCubic | `--regional cubic` | Block | 1.0 |
-| RegAbs | `--regional abs` | Block | 1.0 |
-| RegSqrt | `--regional sqrt` | Block | 0.1 |
-| RegSum | `--regional sqr+cubic` | Block | 1.0 |
-| RegInterpLin | `--regional --interp sqr` | Interp | 1.0 |
-| RegInterpCub | `--regional --interp cubic` | Interp | 1.0 |
+| 标签 | 表达式 | 类型 | qEB |
+|------|--------|------|-----|
+| RegLin | `--regional sqr` | nibble | 1.0 |
+| RegCubic | `--regional cubic` | nibble | 1.0 |
+| RegAbs | `--regional abs` | nibble | 1.0 |
+| RegSqrt | `--regional sqrt` | nibble | 0.1 |
+| RegSum | `--regional sqr+cubic` | SumQoI | 1.0 |
+| RegCompAbsSin | `--regional abs@sin` | Compose | 0.1 |
+| RegMultiSqrAbs | `--regional sqr\|abs` | MultiQoI | 1.0 |
+| RegSumParam | `--regional lin(2,0.5)+sqr` | Sum+Params | 3.0 |
+| RegFX_SinX2 | `--regional sin(x)+x^2` | FX | 1.0 |
+| RegFX_SqrtExp | `--regional sqrt(x)+exp(-x)` | FX | 1.0 |
 
-> 旧 `~0`/`~1`/`~2`/`~3` 在 QOI 矩阵的 legacy switch 中保持兼容。
+---
 
-### 五、数据模式
+### 五、Convolution 测试（6 核 × 2 算法）
+
+通过 encoder `conv(...)` 编码，验证滑动窗口卷积约束。
+
+| 标签 | 核 | conv_tol |
+|------|-----|----------|
+| ConvSum3 | `[1,1,1]` | 0.1 |
+| ConvAvg3 | `[0.25, 0.5, 0.25]` | 0.1 |
+| ConvLap3 | `[1,-2,1]` | 0.5 |
+| ConvSum4 | `[1,1,1,1]` | 0.15 |
+| ConvAvg5 | `[0.2,0.2,0.2,0.2,0.2]` | 0.1 |
+| ConvEdge5 | `[-1,2,0,-2,1]` | 0.5 |
+
+---
+
+### 六、数据模式
 
 | 枚举 | 模式名 | 1D 值域 | 特点 |
 |------|--------|---------|------|
-| D1_RAMP | Ramp | 0→100 线性 | 最优 predictor，暴露 QoI 导数变化 |
-| D2_WIDE | WideRange | 0.001→10000 对数 | 大动态范围，stress per-point eb |
+| D1_RAMP | Ramp | 0→100 线性 | 最优 predictor |
+| D2_WIDE | WideRange | 0.001→10000 对数 | 大动态范围 |
 | D3_SINUSOID | Sinusoid | ~12–88 双音+噪声 | 模拟真实数据 |
 | D4_CLIFF | Cliff | 0.1→1000 断崖 | 预测器失效点 |
 | D5_ZEROCROSS | ZeroCross | -10→10 过零 | 负值域约束 |
 | D6_EXP | Exponential | exp 分布 | 指数分布 |
 | D7_CONST | Constant | 全 1.0 | 退化场景 |
 | D8_RANDWALK | RandomWalk | 随机游走 | 无规律波动 |
-
-### 六、Unit 测试（GTest）
-
-| 二进制 | 类型 | 内容 |
-|--------|------|------|
-| `test_qpet_interp_pointwise` | 端到端 | Interp + pointwise QoI 全链路 |
-| `test_qpet_qoi` | 单元 | XLin/X2 的 interpret_eb、check_comply |
-| `test_qpet_eb_provider` | 单元 | PointwiseEBProvider advance/save/load |
-| `test_qpet_regional` | 单元 | Regional budget tracking、geb capping |
-| `test_qpet_interp` | 单元+端到端 | QpetInterpDecomp 1D/2D round-trip |
-| `test_qpet_composite` | 单元+端到端 | 12 基函数 + Sum/Multi/Compose + nibble 解析器 |

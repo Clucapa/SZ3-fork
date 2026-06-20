@@ -431,6 +431,61 @@ inline EncodeResult make_regional(const EncodeResult &er, bool is_fx) {
     return {~raw, er.qoiParams, er.ok, er.error};
 }
 
+// Encode convolution QoI: kernel weights (comma-separated) + tolerance.
+// Syntax: conv(k0,k1,...,kN,tol)
+// qoi = ~(0x7 d 00 sz2 sz1)    (regional, before flip high nibble=7)
+//   d=1 for 1D, sz1 = kernel width in byte 0
+//   d=2 for 2D, sz2=height(byte1), sz1=width(byte0)
+// qoiParams = base64( double[kernel_weights...], double[conv_tol] )
+inline EncodeResult conv_encode(const std::string &expr) {
+    EncodeResult r;
+    r.ok = false;
+    std::string inner;
+    size_t ps = expr.find('('), pe = expr.rfind(')');
+    if (ps == std::string::npos || pe == std::string::npos || pe <= ps) {
+        r.error = "malformed conv expression, expected conv(k0,k1,...,tol)";
+        return r;
+    }
+    inner = expr.substr(ps + 1, pe - ps - 1);
+
+    std::vector<double> values;
+    size_t pos = 0;
+    while (pos < inner.size()) {
+        size_t next = inner.find(',', pos);
+        if (next == std::string::npos) next = inner.size();
+        std::string tok = inner.substr(pos, next - pos);
+        while (!tok.empty() && std::isspace(static_cast<unsigned char>(tok.front()))) tok.erase(0, 1);
+        while (!tok.empty() && std::isspace(static_cast<unsigned char>(tok.back()))) tok.pop_back();
+        if (tok.empty()) { r.error = "empty token in conv expression"; return r; }
+        values.push_back(std::stod(tok));
+        pos = next + 1;
+    }
+    if (values.size() < 3) {
+        r.error = "conv needs at least 2 kernel weights + 1 tolerance";
+        return r;
+    }
+    double conv_tol = values.back(); values.pop_back();
+    int w = static_cast<int>(values.size());
+
+    // 1D only for now: dim=1, width in byte 0
+    int raw = 0x70000000 | (1 << 24) | (w & 0xFF);
+
+    std::vector<unsigned char> buf;
+    for (double v : values) {
+        const auto *p = reinterpret_cast<const unsigned char *>(&v);
+        buf.insert(buf.end(), p, p + 8);
+    }
+    {
+        const auto *p = reinterpret_cast<const unsigned char *>(&conv_tol);
+        buf.insert(buf.end(), p, p + 8);
+    }
+
+    r.qoi = ~raw;
+    r.qoiParams = qoi_encode::base64_encode(buf.data(), buf.size());
+    r.ok = true;
+    return r;
+}
+
 }  // namespace qoi_encode
 
 #endif

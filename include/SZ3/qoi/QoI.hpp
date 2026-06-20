@@ -49,6 +49,10 @@ public:
 
     virtual bool is_pointwise() const { return id >= 0; }
 
+    virtual bool has_bias() const { return false; }
+    virtual void precompute_data(const T *, size_t) {}
+    virtual T    get_bias(size_t) const { return 0; }
+
     int id = 0;
 };
 

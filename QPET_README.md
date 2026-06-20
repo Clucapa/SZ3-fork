@@ -1,61 +1,46 @@
 # SZ3 QPET 插件实现说明
 
-本仓库在 SZ3 v3.3.2 基础上，以独立模块化的方式实现了 QPET 插件。核心设计目标：**接口统一，对基底 SZ3 侵入最小，便于未来 SZ3 升级时同步移植**。
+在 SZ3 v3.3.2 基础上实现的 QPET 插件。核心设计目标：**接口统一，对基底 SZ3 侵入最小**。
 
 ## 设计原则
 
-- **新增功能放新文件，不改 SZ3 原生类**：所有 QoI 实现、EBProvider、组合逻辑都在 `qoi/` 下的独立头文件中，不修改 SZ3 的 Predictor、Quantizer、Encoder、Lossless 等原有模块。
-- **通过虚接口消除硬编码 dispatch**：`QoIIf` 基类承担全部多态职责，外部代码不判断 `qoi->id`，不 static_cast 到具体类。
-- **两类 Decomposition 共享同一套 QoI + EBProvider 接口**：`QpetBlockDecomp`（Lorenzo/Regression 预测）和 `QpetInterpDecomp`（插值预测）都通过 `qoi->create_eb_provider(conf)` 获取 eb 源，遍历和预测逻辑不同但量化路径一致。
+- **新增功能放新文件，不改 SZ3 原生类**
+- **通过虚接口消除硬编码 dispatch**
+- **两类 Decomposition 共享同一套 QoI + EBProvider 接口**
 
 ## 工作流
 
 ```
-原 SZ3:
-  Config → [BlockwiseDecomp: Pred + LinearQnt(全局eb)] → quant_inds
-                                                            ↓
-                                     HuffmanEncoder → Lossless_zstd → 文件
-
-现 QPET:
-  Config → eb 预算 → [QpetBlockDecomp: Pred + QpetQnt(逐点eb)]
-                         ├─ ① qnt_eb(eb) → qi_eb
-                         ├─ ② qnt_overwrite(data,pred,eb) → qi_data
-                         └─ ③ 拼接为 [qi_eb.. | qi_data..]
-                                     ↓
-                          HuffmanEncoder(统一) → Lossless_zstd → 文件
-         └── 或 Interp 路径 ──→ [QpetInterpDecomp: 插值预测 + QpetQnt]
+Config → eb 预算 → [QpetBlockDecomp: Pred + QpetQnt(逐点eb)]
+                       ├─ qnt_eb(eb) → qi_eb
+                       ├─ qnt_overwrite(data,pred,eb) → qi_data
+                       └─ 拼接 [qi_eb.. | qi_data..]
+         └── 或 Interp ──→ [QpetInterpDecomp: 插值预测 + QpetQnt]
+                                    ↓
+                         HuffmanEncoder → Lossless_zstd → 文件
 ```
-
-关键差异：
-1. **量化前增加 eb 预算**：QoI 实例逐点计算误差界
-2. **量化器改为 QpetQnt**：两步操作（先量化 eb 得 qi_eb，再用量化后的 eb' 量化残差得 qi_data），eb' ≤ 原始 eb（安全）
 
 ## QoI 接口体系
 
-整个系统的核心是 `QoIIf<T,N>` 抽象基类（`include/SZ3/qoi/QoI.hpp`）。它定义了统一的虚接口，所有 QoI 实现只依赖这个接口：
+`QoIIf<T,N>` 抽象基类（`include/SZ3/qoi/QoI.hpp`）：
 
 | 方法 | 语义 | 默认实现 |
 |------|------|----------|
-| `interpret_eb(x)` | 给定数据值，返回逐点误差界 eb | 基于 `eval()` 数值导数 |
+| `interpret_eb(x)` | 逐点误差界 eb | 基于 `eval()` 数值导数 |
 | `check_comply(orig, dec)` | 验证 `|f(orig)-f(dec)| ≤ tol` | 基于 `eval()` |
-| `eval(val)` | 正向求值 f(val) | `return val`（恒等） |
-| `create_eb_provider(conf)` | 创建对应的 EBProvider | 纯虚，子类实现 |
-| `is_pointwise()` | 点态或块级 budget tracking | `false` |
-| `precompress_block(N)` / `update_tolerance(o,d)` / `postcompress_block()` | 块生命周期（Regional 用） | 空 |
-
-**设计意图**：`eval()` 和 `create_eb_provider()` 的加入使得——
-- 组合 QoI（SumQoI、MultiQoI）可以通过 `eval()` 算出组合导数，无需了解每个子 QoI 的内部公式；
-- 外部 Decomposition 类只需一行 `qoi->create_eb_provider(conf)`，不需要知道内部是 PointwiseEBProvider、RegionalMeanEBProvider 还是 MultiQoIEBProvider。
-
-同样 `is_pointwise()` 替代了此前 `qoi->id < 10` 的硬编码判断，让 SZDispatcher 的 eb 预计算逻辑对 QoI 类型透明。
+| `eval(val)` | 正向求值 f(val) | `return val` |
+| `create_eb_provider(conf)` | 创建对应 EBProvider | 纯虚 |
+| `is_pointwise()` | 点态/块级 budget tracking | `id >= 0` |
+| `precompress_block(N)` / `update_tolerance(o,d)` | 块生命周期（Regional 用） | 空 |
+| `has_bias()` / `precompute_data(data,n)` / `get_bias(idx)` | 卷积偏置预计算 | false / 空 / 0 |
 
 ## EBProvider 抽象层
 
 ```cpp
 template <typename T>
 class EBProvider {
-    virtual T advance(T orig, T dec) = 0;   // 压缩端：取 eb，更新状态
-    virtual void advance() = 0;              // 解压端：推进计数器
+    virtual T advance(T orig, T dec) = 0;
+    virtual void advance() = 0;
     virtual void precompress_block(size_t) = 0;
     virtual void postcompress_block() = 0;
     virtual void save(uchar*&) const = 0;
@@ -63,105 +48,85 @@ class EBProvider {
 };
 ```
 
-所有 eb 来源统一为这个接口，目前有三种实现：
+| 实现 | 场景 | eb 来源 |
+|------|------|---------|
+| `PointwiseEBProvider` | 点态 QoI | `conf.ebs[]` 预计算 |
+| RegionalNibble::Impl | Regional QoI | 在线 budget tracking |
+| `MultiQoIEBProvider` | 多组 AND | 多个子 Provider，advance 取 min |
 
-| 实现 | 适用场景 | eb 来源 |
-|------|----------|---------|
-| `PointwiseEBProvider` | 点态 QoI（XLin, X2, …, 所有基函数） | 预计算 `conf.ebs[]` |
-| `RegionalMeanEBProvider` / `RegionalMeanSqEBProvider` | 区域均值/均方 QoI | 在线 budget tracking |
-| `MultiQoIEBProvider` | 多组 AND 约束 | 持有多个子 Provider，`advance` 取 min |
-
-## 新增与修改的文件
-
-### 新增（全在 `include/SZ3/qoi/` 和 `include/SZ3/decomposition/`）
+## 新增文件
 
 ```
 include/SZ3/qoi/
-├── QoI.hpp                          QoIIf 基类（eval, create_eb_provider, is_pointwise）
-├── QoIIf.hpp                        工厂 GetQOI + nibble 解析器 + ParamReader + Regional 新编码
-├── QoI_IsolineNibble.hpp            Isoline 模式（mode 6，等值线约束叠加子 QoI）
+├── QoI.hpp                          QoIIf 基类
+├── QoIIf.hpp                        工厂 GetQOI + 全部 mode dispatch + nibble 解析器
+├── QoI_IsolineNibble.hpp            Isoline 模式（mode 6）
 ├── QoI_FX.hpp                       FX 模式（mode 7，TinyExpr 任意函数）
-├── RegionalNibble.hpp               Regional 新编码（nibble/FX，Block/Interp 在压缩器算法层区分）
-├── EBProvider.hpp                   EBProvider 抽象接口
-├── PointwiseEBProvider.hpp          点态 eb 源
-├── MultiQoIEBProvider.hpp           多 provider min 组合
-├── QoIXLin.hpp / QoIX2.hpp          基函数（已有，增加 eval + create_eb_provider + 参数化构造）
-├── QoI_XCubic.hpp .. QoI_XPower.hpp  10 个新增基函数（通过 eval() 自动推导 interpret_eb）
-├── QoI_SumQoI.hpp                   组内求和约束（Σ fi，数值导数推 eb）
-├── QoI_MultiQoI.hpp                 多组 AND 约束（取 min eb）
-├── QoI_Compose.hpp                  函数嵌套 Compose(f,g) = f(g(x))
-├── RegionalMean.hpp / RegionalMeanSq.hpp            blockwise Regional QoI（遗留，已由 RegionalNibble 取代）
-├── QoI_RegionalAvgInterp.hpp / QoI_RegionalMeanSqInterp.hpp   Interp 路径专用 QoI（遗留）
+├── QoI_Conv.hpp                     Conv 模式（Regional 族，滑动窗口卷积 + bias）
+├── RegionalNibble.hpp               Regional 统一编码（nibble/FX）
+├── QoIXLin.hpp .. QoI_XPower.hpp    12 个基函数
+├── QoI_SumQoI.hpp / QoI_MultiQoI.hpp / QoI_Compose.hpp  组合逻辑
+├── RegionalMean.hpp / RegionalMeanSq.hpp                 legacy（已由 RegionalNibble 取代）
+├── QoI_RegionalAvgInterp.hpp / QoI_RegionalMeanSqInterp.hpp  legacy
 │
 include/SZ3/decomposition/
-├── QpetBlockDecomp.hpp              块级分解器（Lorenzo/Regression）
-└── QpetInterpDecomp.hpp             插值分解器（linear/cubic，锚点支持 + check_comply 安全网）
+├── QpetBlockDecomp.hpp              块级分解器
+└── QpetInterpDecomp.hpp             插值分解器
 │
-tools/qoi_encoder/                   独立 encoder CLI 工具（encode.hpp + fx_encode.hpp + main.cpp）
-test/                                端到端参数化测试套件（e2e + isoline_tests + encoder_tests）
+tools/qoi_encoder/                   encoder CLI（encode.hpp + fx_encode.hpp + main.cpp）
+test/                                测试套件（e2e + isoline_tests + encoder_tests）
 ```
 
-### 修改（对 SZ3 基底侵入控制在最小范围）
+## 对 SZ3 基底的修改（最小侵入）
 
-| 文件 | 变更原因 |
-|------|----------|
-| `SZ3/qoi/QoI.hpp` | 增加 `eval()`, `create_eb_provider()`, `is_pointwise()` 三个虚方法。仅此一个文件有接口级变更，且向后兼容 |
-| `SZ3/decomposition/Decomposition.hpp` | 补一个 `#include Config.hpp`（原代码依赖 GCC 惰性查模板名，非标准行为） |
-| `SZ3/qoi/QoIIf.hpp` | 工厂从 4 个 case 扩展到 6 个 legacy case + nibble 解析路径（含 0xE Compose 递归下降） |
-| `SZ3/api/impl/SZDispatcher.hpp` | `qoi->id < 10` 改为 `qoi->is_pointwise()`；Interp 路径统一走 `_qpet` |
-| `SZ3/api/impl/SZAlgoInterp.hpp` | 新增 `SZ_compress_Interp_qpet` / `SZ_decompress_Interp_qpet` |
-| `SZ3/decomposition/QpetBlockDecomp.hpp` | `if (qoi->id == 10/11)` 硬编码 dispatch 替换为 `qoi->create_eb_provider(conf)` |
-| `SZ3/decomposition/QpetInterpDecomp.hpp` | 同上；新增 `precompress_block` + `check_comply` 安全网 + `interpret_eb` 位置无关 eb 取值 |
-| `SZ3/utils/Config.hpp` | 新增 `std::vector<unsigned char> qoiParams`（原始二进制存储，base64 仅为传输格式）；新增 base64 编解码器；删除 `qEBase`/`qELogB` |
-| `CMakeLists.txt` | 新增 `tools/qoi_encoder` 子目录构建 |
-| `tools/qoi_encoder/` | 新增：encode.hpp（nibble 编码器）、fx_encode.hpp（SymEngine FX）、main.cpp（CLI）、CMakeLists.txt（QOI_ENABLE_FX 选项） |
-| `test/` | 新增：isoline_tests.hpp、encoder_tests.hpp 扩展 iso6 条目、verify.hpp base64/isolines 辅助、run_tests.hpp max_data 缩放、e2e_main.cpp --isoline flag |
+| 文件 | 变更 |
+|------|------|
+| `SZ3/qoi/QoI.hpp` | 增加 `eval`, `create_eb_provider`, `is_pointwise`, `has_bias`, `precompute_data`, `get_bias` |
+| `SZ3/qoi/QoIIf.hpp` | 工厂扩展：FX / Isoline / Conv / Regional nibble / Regional FX, 未知 nibble → throw |
+| `SZ3/api/impl/SZDispatcher.hpp` | `is_pointwise()` 替代 `id<10`；bias 预计算 + dataCopy 偏置施加 |
+| `SZ3/api/impl/SZAlgoInterp.hpp` | 新增 `_qpet` 版本 |
+| `SZ3/decomposition/QpetBlockDecomp.hpp` / `QpetInterpDecomp.hpp` | EBProvider 取代硬编码 dispatch |
+| `SZ3/utils/Config.hpp` | `qoiParams` → `vector<uchar>` 原始二进制，base64 codec，删除旧扩展字段 |
+| `CMakeLists.txt` | 新增 `tools/qoi_encoder` |
 
 ## Nibble 编码与 qoiParams
 
-`conf.qoi` 为 32-bit int，低 28 bit 为 nibble 数据，高 4 bit 编码模式：
+`conf.qoi` 为 32-bit int。高位 nibble 编码模式：
 
 | 高位 | 模式 | 说明 |
 |------|------|------|
 | `0x0` | 常规 nibble | 基函数 + Sum/Compose/Multi |
 | `0x6` | Isoline | 等值线约束模式 |
-| `0x7` | FX | SymEngine 任意函数 |
-| `0xF`（qoi<0）| Regional | `~rid` 翻转 |
+| `0x7` (qoi>0) | FX | SymEngine 任意函数 |
+| `0xF` (qoi<0) | Regional nibble | `~rid` 翻转 |
+| `0xC` (qoi<0) | Regional FX | `~rid` 翻转 |
+| `0x8` (qoi<0) | Conv | `~rid` 翻转，滑动窗口卷积 |
+| 其他非零 | — | throw |
 
-`conf.qoiParams` 内部存储为原始二进制（`vector<uchar>`），base64 仅为 encoder CLI 和 INI 的传输格式。
+`conf.qoiParams` 内部存储为原始二进制（`vector<uchar>`），base64 仅为 CLI 和 INI 的传输格式。
 
-> 完整的 nibble 码表、编码示例、参数格式、Isoline/FX/Regional 详解见 **[qoi_readme.md](qoi_readme.md)**。
+> 完整格式、参数、示例见 **[qoi_readme.md](qoi_readme.md)**。
 
-### qoi_encoder 工具
-
-独立 CLI 工具，纳入主构建（`cmake -DQOI_ENABLE_FX=ON` 启用 SymEngine）：
+## Encoder CLI
 
 ```bash
+# Nibble
 ./test/bin/qoi_encoder "sqr+abs+cubic"
+./test/bin/qoi_encoder "lin(2,0.5)+sqr"
+
+# Isoline
 ./test/bin/qoi_encoder "iso6(sqr, -5, 5, 3, 0.01)"
-./test/bin/qoi_encoder 'fx("sin(x)+x^2")'
+
+# FX (需要 SymEngine)
+./test/bin/qoi_encoder "sin(x)+x^2"
+
+# Regional
+./test/bin/qoi_encoder --regional "sqr+cubic"
+./test/bin/qoi_encoder --regional "sin(x)+x^2"
+
+# Convolution
+./test/bin/qoi_encoder "conv(1,-2,1,0.5)"
 ```
-
-## Interp 路径接入
-
-InterpolationDecomposition（线性/三次样条分层插值）是 SZ3 的另一条独立压缩路径。我们新建 `QpetInterpDecomp` 将其接入 QPET：
-
-- 照搬 InterpolationDecomposition 的所有遍历与插值逻辑，但每一处的 `quantize_and_overwrite(d, pred)` 替换为两步量化 `qnt_eb(eb) + qnt_overwrite(d, pred, eb)`
-- EBProvider 通过 `qoi->create_eb_provider(conf)` 注入，与 blockwise 路径一致
-- 锚点网格走 QpetQnt 的 `force_save_unpred` / `recv` 无损保存
-- **QoI 安全网**：量化后逐点 `check_comply`，不满足时回写原始值（无损），与 BlockDecomp 一致
-- **位置无关 eb 取值**：使用 `qoi->interpret_eb(orig_val)` 直接计算 eb，不依赖 `advance()` 的顺序递增假设，适应 stride 遍历顺序
-- 文件格式 `[qi_ebs | qi_datas]` 与 blockwise 路径统一
-
-这一设计使两类预测器（Lorenzo/Regression vs Interp）共享完全相同的 QoI + EBProvider + QpetQnt 栈，新增 QoI 类型时两条路径自动受益。
-
-## 文件格式
-
-```
-[Config] [Decomp: fallback_pred + pred + QpetQnt(rd + unpred + eb_log)] [Huffman树] [qi_cnt] [E(qi_vec)] → Zstd
-```
-
-Blockwise 和 Interp 路径统一：`qi_vec` 前半为 qi_eb，后半为 qi_data。
 
 ## 编译与测试
 
@@ -169,53 +134,44 @@ Blockwise 和 Interp 路径统一：`qi_vec` 前半为 qi_eb，后半为 qi_data
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel $(nproc)
 
-# 基础门禁（QOI 矩阵 + 剪枝，约 1s）
+# 基础门禁
 ./test/bin/e2e --basic --encoder-path=./test/bin/qoi_encoder
 
-# 全量（QOI 矩阵 + 编码器往返 + Isoline + Regional ≈ 1874 条，约 2min）
+# 全量（约 1890 条，约 2min）
 ./test/bin/e2e --full --encoder-path=./test/bin/qoi_encoder
 
-# 仅 Regional 新编码
+# 分项
 ./test/bin/e2e --regional --encoder-path=./test/bin/qoi_encoder
+./test/bin/e2e --conv --encoder-path=./test/bin/qoi_encoder
 ```
 
-> 详细的 CLI 用法、CI 触发关键字、测试覆盖清单见 **[test_readme.md](test_readme.md)**。
-> QOI 编码格式、qoiParams、Regional/FX/Isoline 详解见 **[qoi_readme.md](qoi_readme.md)**。
+> 详细 CLI、测试覆盖清单见 **[test_readme.md](test_readme.md)**。编码格式见 **[qoi_readme.md](qoi_readme.md)**。
 
 ## API 调用
-
-QPET 的使用入口仍是 `SZ_compress_dispatcher`，在 `Config` 中设置：
 
 ```cpp
 #include "SZ3/api/SZ3.hpp"
 
 SZ3::Config conf;
 conf.setDims(dims.begin(), dims.end());
-conf.cmprAlgo  = SZ3::ALGO_LORENZO_REG;  // 或 ALGO_INTERP / ALGO_INTERP_LORENZO
+conf.cmprAlgo  = SZ3::ALGO_LORENZO_REG;
 
-// --- 选 QoI ---
-// 1) legacy
-conf.qoi = 0;   // XLin (f(x)=x)
-conf.qoi = 1;   // X2   (f(x)=x²)
+// Pointwise nibble
+conf.qoi = 0x12;      // sqr + cubic (Sum)
+conf.qoi = 0x1F3;     // sqr AND sqrt (Multi)
+conf.qoi = 0x14E;     // Compose(exp, sqr) = e^(x²)
 
-// 2) nibble 编码（点态组合，含 Compose）
-conf.qoi = 0x2;       // XCubic
-conf.qoi = 0x12;      // X2 + XCubic (Sum)
-conf.qoi = 0x1F3;     // X2 AND XSqrt (MultiQoI)
-conf.qoi = 0x14E;     // Compose(Exp, Square) = e^(x²)
+// Regional
+conf.qoi = ~0;        // RegionalMean (XLin)
+conf.qoi = ~1;        // RegionalMeanSq (sqr)
 
-// 3) regional（~翻转）
-conf.qoi = ~0;   // RegionalMean
-conf.qoi = ~1;   // RegionalMeanSq
-conf.qoi = ~2;   // RegionalAvgInterp
-conf.qoi = ~3;   // RegionalMeanSqInterp
+// Convolution
+// Use encoder or manually construct:
+// conf.qoi = ~(0x70000000 | (1<<24) | w);   // 1D conv, width w
+// conf.qoiParams = base64_decode("...");     // double[w] weights + tol
 
-// --- 参数化（可选，空串 = 默认值）---
-conf.qoiParams = "";   // 无参数，全部用默认值
-
-// --- QPET 量化参数 ---
-conf.qEB    = 0.01;   // QoI tolerance (τ / geb)
-conf.qR     = 12;     // eb 量化 range
+conf.qEB    = 0.01;   // QoI tolerance
+conf.qR     = 12;
 conf.quantbinCnt = 65536;
 
 size_t cmpSize = SZ_compress(conf, data, outBuf, outCap);

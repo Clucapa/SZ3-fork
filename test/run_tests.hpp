@@ -95,12 +95,14 @@ static TestResult run_qoi_test(const QoiDef &qd, uint N, int algo, uint8_t ia,
 
     auto conf = make_config(qd, N, algo, ia, dims);
 
-    // Use encoder to produce qoi/qoiParams (Regional QoIs use hardcoded id).
+    // Use encoder to produce qoi/qoiParams.
     if (qd.expr) {
         if (g_encoder_path.empty()) { r.fail_reason = "skip-no-encoder"; return r; }
         int enc_qoi = 0; std::string enc_b64;
         std::string err;
-        if (!call_encoder(qd.expr, enc_qoi, enc_b64, err))
+        std::string flags;
+        if (qd.is_regional) flags = "--regional";
+        if (!call_encoder(qd.expr, enc_qoi, enc_b64, err, flags))
             { r.passed=false; r.fail_reason="encoder-error"; r.detail=err; return r; }
         conf.qoi = enc_qoi;
         conf.qoiParams = sz3_test::base64_decode_raw(enc_b64);

@@ -29,6 +29,7 @@ int main(int argc, char **argv) {
             "  nibble:    lin sqr cubic sqrt exp xlogx log recip abs sin tanh pow\n"
             "             Operators: + SumQoI, @ Compose, | MultiQoI\n"
             "  isoline:   iso6(nibble_expr, min, max, count, meb [; ...])\n"
+            "  conv:      conv(k0,k1,...,kN,tol) convolution kernel QoI\n"
 #ifdef QOI_ENCODER_HAS_FX
             "  fallback:  arbitrary math expressions (sin(x)+x^2, etc.) via SymEngine\n"
 #endif
@@ -38,6 +39,15 @@ int main(int argc, char **argv) {
     }
 
     std::string expr_str(expr);
+
+    // Convolution mode
+    if (expr_str.size() > 5 && expr_str.substr(0, 5) == "conv(" && expr_str.back() == ')') {
+        auto r = qoi_encode::conv_encode(expr_str);
+        if (!r.ok) { fprintf(stderr, "Conv Error: %s\n", r.error.c_str()); return 1; }
+        printf("qoi        = 0x%X\n", r.qoi);
+        printf("qoiParams  = \"%s\"\n", r.qoiParams.c_str());
+        return 0;
+    }
 
     // Isoline mode
     if (expr_str.size() > 6 && expr_str.substr(0, 4) == "iso6" && expr_str.back() == ')') {
