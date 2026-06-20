@@ -48,6 +48,7 @@ static double h_multi_x2(double x)    { return h_x2(x); }
 struct QoiDef {
     int id;
     const char *name;
+    const char *expr;
     QoiDomain domain;
     bool is_regional;
     double qEB;
@@ -56,32 +57,33 @@ struct QoiDef {
     double (*feval2)(double);
     double qEB2;
     double max_data;
+    double min_abs;
 };
 
 inline const QoiDef *all_qois() {
     static const QoiDef list[] = {
         // ---- pointwise base ----
-        {0x0,  "XLin",    DOM_UNRESTRICTED, false, 1.0,  10.0, h_xlin,        nullptr,    0, 0},
-        {0x1,  "X2",      DOM_UNRESTRICTED, false, 1.0,  10.0, h_x2,          nullptr,    0, 0},
-        {0x2,  "XCubic",  DOM_UNRESTRICTED, false, 1.0,  10.0, h_xcubic,      nullptr,    0, 0},
-        {0x3,  "XSqrt",   DOM_NON_NEGATIVE, false, 0.1,  5.0,  h_xsqrt,       nullptr,    0, 0},
-        {0x4,  "XExp",    DOM_UNRESTRICTED, false, 1.0,  10.0, h_xexp,        nullptr,    0, 30.0},
-        {0x5,  "XLogX",   DOM_POSITIVE,     false, 1.0,  10.0, h_xlogx,       nullptr,    0, 0},
-        {0x6,  "LogX",    DOM_POSITIVE,     false, 0.1,  5.0,  h_logx,        nullptr,    0, 0},
-        {0x7,  "XRecip",  DOM_NON_ZERO,     false, 1.0,  10.0, h_xrecip,      nullptr,    0, 0},
-        {0x8,  "XAbs",    DOM_UNRESTRICTED, false, 1.0,  10.0, h_xabs,        nullptr,    0, 0},
-        {0x9,  "XSin",    DOM_UNRESTRICTED, false, 0.1,  5.0,  h_xsin,        nullptr,    0, 0},
-        {0xA,  "XTanh",   DOM_UNRESTRICTED, false, 0.1,  5.0,  h_xtanh,       nullptr,    0, 0},
-        {0xB,  "XPower",  DOM_UNRESTRICTED, false, 1.0,  10.0, h_xpow,        nullptr,    0, 0},
+        {0x0,  "XLin",    "lin",            DOM_UNRESTRICTED, false, 1.0,  10.0, h_xlin,        nullptr,    0, 0, 0},
+        {0x1,  "X2",      "sqr",            DOM_UNRESTRICTED, false, 1.0,  10.0, h_x2,          nullptr,    0, 100.0, 0},
+        {0x2,  "XCubic",  "cubic",          DOM_UNRESTRICTED, false, 1.0,  10.0, h_xcubic,      nullptr,    0, 100.0, 0},
+        {0x3,  "XSqrt",   "sqrt",           DOM_NON_NEGATIVE, false, 0.1,  5.0,  h_xsqrt,       nullptr,    0, 0, 0},
+        {0x4,  "XExp",    "exp",            DOM_UNRESTRICTED, false, 1.0,  10.0, h_xexp,        nullptr,    0, 5.0, 0},
+        {0x5,  "XLogX",   "xlogx",          DOM_POSITIVE,     false, 1.0,  10.0, h_xlogx,       nullptr,    0, 0, 0},
+        {0x6,  "LogX",    "log",            DOM_POSITIVE,     false, 0.1,  5.0,  h_logx,        nullptr,    0, 0, 0},
+        {0x7,  "XRecip",  "recip",          DOM_NON_ZERO,     false, 1.0,  10.0, h_xrecip,      nullptr,    0, 0, 0.1},
+        {0x8,  "XAbs",    "abs",            DOM_UNRESTRICTED, false, 1.0,  10.0, h_xabs,        nullptr,    0, 0, 0},
+        {0x9,  "XSin",    "sin",            DOM_UNRESTRICTED, false, 0.1,  5.0,  h_xsin,        nullptr,    0, 0, 0},
+        {0xA,  "XTanh",   "tanh",           DOM_UNRESTRICTED, false, 0.1,  5.0,  h_xtanh,       nullptr,    0, 0, 0},
+        {0xB,  "XPower",  "pow",            DOM_UNRESTRICTED, false, 1.0,  10.0, h_xpow,        nullptr,    0, 100.0, 0},
         // ---- composite pointwise ----
-        {0x12, "SumQoI",  DOM_UNRESTRICTED, false, 1.0,  10.0, h_sum_xcubic_x2, nullptr, 0, 0},
-        {0x1F3,"MultiQoI",DOM_UNRESTRICTED, false, 1.0,  10.0, h_multi_sqrt,    h_multi_x2, 1.0, 0},
-        {0x14E,"Compose", DOM_UNRESTRICTED, false, 1.0,  10.0, h_comp_exp_x2,   nullptr,    0, 0},
+        {0x12, "SumQoI",  "sqr+cubic",      DOM_UNRESTRICTED, false, 1.0,  10.0, h_sum_xcubic_x2, nullptr, 0, 100.0, 0},
+        {0x1F3,"MultiQoI","sqrt|sqr",       DOM_UNRESTRICTED, false, 1.0,  10.0, h_multi_sqrt,    h_multi_x2, 1.0, 100.0, 0},
+        {0x14E,"Compose", "exp@sqr",        DOM_UNRESTRICTED, false, 1.0,  10.0, h_comp_exp_x2,   nullptr,    0, 0, 0},
         // ---- regional ----
-        {~0,   "RegMean",   DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr, nullptr, 0, 0},
-        {~1,   "RegMeanSq", DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr, nullptr, 0, 0},
-        {~2,   "RegAvgInt", DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr, nullptr, 0, 0},
-        {~3,   "RegMeanSqI",DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr, nullptr, 0, 0},
+        {~0,   "RegMean",   nullptr,        DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr, nullptr, 0, 0, 0},
+        {~1,   "RegMeanSq", nullptr,        DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr, nullptr, 0, 0, 0},
+        {~2,   "RegAvgInt", nullptr,        DOM_UNRESTRICTED, true,  2.0,   5.0,  nullptr, nullptr, 0, 0, 0},
+        {~3,   "RegMeanSqI",nullptr,        DOM_UNRESTRICTED, true,  200.0, 10.0, nullptr, nullptr, 0, 0, 0},
     };
     return list;
 }

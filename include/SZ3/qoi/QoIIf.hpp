@@ -27,50 +27,12 @@
 #include "SZ3/qoi/RegionalMeanSq.hpp"
 #include "SZ3/qoi/QoI_RegionalAvgInterp.hpp"
 #include "SZ3/qoi/QoI_RegionalMeanSqInterp.hpp"
+#include "SZ3/qoi/QoI_IsolineNibble.hpp"
 #include "SZ3/utils/Config.hpp"
 
 namespace SZ3 {
 
 namespace detail {
-
-inline std::vector<unsigned char> base64_decode(const std::string &in) {
-    if (in.empty()) return {};
-
-    auto val = [](char c) -> unsigned char {
-        if (c >= 'A' && c <= 'Z') return c - 'A';
-        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-        if (c >= '0' && c <= '9') return c - '0' + 52;
-        if (c == '+') return 62;
-        if (c == '/') return 63;
-        return 0xFF;
-    };
-
-    std::vector<unsigned char> out;
-    out.reserve((in.size() * 3) / 4 + 1);
-
-    size_t i = 0;
-    for (; i + 4 <= in.size(); i += 4) {
-        unsigned char a = val(in[i]);
-        unsigned char b = val(in[i + 1]);
-        if (a == 0xFF || b == 0xFF) break;
-        out.push_back((a << 2) | (b >> 4));
-
-        if (in[i + 2] == '=') {
-            out.push_back((b << 4));
-            break;
-        }
-        unsigned char c = val(in[i + 2]);
-        if (c == 0xFF) break;
-        out.push_back((b << 4) | (c >> 2));
-
-        if (in[i + 3] == '=') break;
-        unsigned char d = val(in[i + 3]);
-        if (d == 0xFF) break;
-        out.push_back((c << 6) | d);
-    }
-
-    return out;
-}
 
 class ParamReader {
 public:
@@ -217,10 +179,9 @@ template <class T, uint N>
 std::shared_ptr<concepts::QoIIf<T, N>> assemble_from_nibbles(
         const Config &conf) {
     auto groups = parse_qoi_nibbles(conf.qoi);
-    if (groups.empty()) return nullptr;
+    if (groups.empty()) { return std::make_shared<QoI_XLin<T, N>>(conf.qEB, conf.absErrorBound); }
 
-    auto decoded = base64_decode(conf.qoiParams);
-    ParamReader params(decoded);
+    ParamReader params(conf.qoiParams);
 
     if (groups.size() == 1)
         return assemble_group<T, N>(groups[0], params,
@@ -235,14 +196,46 @@ std::shared_ptr<concepts::QoIIf<T, N>> assemble_from_nibbles(
     return std::make_shared<QoI_MultiQoI<T, N>>(std::move(grp_vec));
 }
 
+template <class T, uint N>
+std::shared_ptr<concepts::QoIIf<T, N>> assemble_isoline_nibble(const Config &conf) {
+    int nibble_qoi = conf.qoi & 0x0FFFFFFF;
+    auto groups = parse_qoi_nibbles(nibble_qoi);
+    if (groups.empty())
+        groups.push_back(QoIGroup{});
+
+    ParamReader params(conf.qoiParams);
+    std::vector<std::shared_ptr<concepts::QoIIf<T, N>>> grp_vec;
+
+    for (auto &g : groups) {
+        auto q = assemble_group<T, N>(g, params, conf.qEB, conf.absErrorBound);
+        if (!q)
+            q = std::make_shared<QoI_XLin<T, N>>(conf.qEB, conf.absErrorBound);
+
+        IsolineConfig cfg;
+        cfg.min_v = params.read();
+        cfg.max_v = params.read();
+        cfg.count = static_cast<int>(params.read());
+        cfg.meb   = params.read();
+
+        grp_vec.push_back(std::make_shared<QoI_IsolineNibble<T, N>>(
+            conf.qEB, conf.absErrorBound, std::move(q), cfg));
+    }
+
+    if (grp_vec.size() == 1)
+        return grp_vec[0];
+    return std::make_shared<QoI_MultiQoI<T, N>>(std::move(grp_vec));
+}
+
 }  // namespace detail
 
 template <class T, uint N>
 std::shared_ptr<concepts::QoIIf<T, N>> GetQOI(const Config &conf) {
-    // FX mode: high nibble = 0x7
     if (((conf.qoi >> 28) & 0xF) == 7) {
-        auto raw = detail::base64_decode(conf.qoiParams);
-        return std::make_shared<QoI_FX<T, N>>(conf.qEB, conf.absErrorBound, raw);
+        return std::make_shared<QoI_FX<T, N>>(conf.qEB, conf.absErrorBound, conf.qoiParams);
+    }
+
+    if (((conf.qoi >> 28) & 0xF) == 6) {
+        return detail::assemble_isoline_nibble<T, N>(conf);
     }
 
     if (conf.qoi < 0) {
@@ -260,10 +253,8 @@ std::shared_ptr<concepts::QoIIf<T, N>> GetQOI(const Config &conf) {
                 return nullptr;
         }
     }
-    if (conf.qoi == 0)
-        return std::make_shared<QoI_XLin<T, N>>(conf.qEB, conf.absErrorBound);
-    if (conf.qoi == 1)
-        return std::make_shared<QoI_X2<T, N>>(conf.qEB, conf.absErrorBound);
+
+    if (((conf.qoi >> 28) & 0xF) != 0) return nullptr;
     return detail::assemble_from_nibbles<T, N>(conf);
 }
 

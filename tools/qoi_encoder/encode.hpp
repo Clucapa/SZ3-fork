@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -201,7 +202,7 @@ inline void emit(const AstNode &node, std::vector<int> &nibbles,
         case AstNode::LEAF:
             nibbles.push_back(node.nibble);
             for (double v : node.params) params.push_back(v);
-            for (int i = (int)node.params.size(); i < param_count(node.nibble); ++i)
+            for (int i = static_cast<int>(node.params.size()); i < param_count(node.nibble); ++i)
                 params.push_back(std::nan(""));
             break;
         case AstNode::SUM:
@@ -307,6 +308,116 @@ inline EncodeResult encode(const std::string &expr) {
     if (!params.empty())
         r.qoiParams = base64_encode(params.data(), params.size() * sizeof(double));
     return r;
+}
+
+static size_t find_nibble_expr_end(const std::string &s, size_t start) {
+    int depth = 0;
+    for (size_t i = start; i < s.size(); i++) {
+        if (s[i] == '(') depth++;
+        else if (s[i] == ')') depth--;
+        else if (depth == 0 && (s[i] == ',' || s[i] == ';')) return i;
+    }
+    return s.size();
+}
+
+static std::string trim_str(const std::string &s) {
+    size_t a = 0, b = s.size();
+    while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) a++;
+    while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) b--;
+    return s.substr(a, b - a);
+}
+
+inline EncodeResult iso6_encode(const std::string &expr) {
+    size_t ps = expr.find('(');
+    size_t pe = expr.rfind(')');
+    if (ps == std::string::npos || pe == std::string::npos || pe <= ps)
+        return {0, "", false, "malformed iso6 expression"};
+    std::string inner = expr.substr(ps + 1, pe - ps - 1);
+
+    std::vector<std::string> raw_groups;
+    size_t pos = 0;
+    while (pos < inner.size()) {
+        int depth = 0;
+        size_t start = pos;
+        while (pos < inner.size()) {
+            if (inner[pos] == '(') depth++;
+            else if (inner[pos] == ')') depth--;
+            else if (depth == 0 && inner[pos] == ';') break;
+            pos++;
+        }
+        raw_groups.push_back(trim_str(inner.substr(start, pos - start)));
+        if (pos < inner.size() && inner[pos] == ';') pos++;
+    }
+    if (raw_groups.empty())
+        return {0, "", false, "no groups in iso6 expression"};
+
+    std::vector<int> all_nibbles;
+    std::vector<double> all_params;
+    std::vector<double> iso_configs;
+
+    for (size_t gi = 0; gi < raw_groups.size(); gi++) {
+        const std::string &rg = raw_groups[gi];
+        if (rg.empty()) return {0, "", false, "empty group in iso6 expression"};
+
+        size_t comma = find_nibble_expr_end(rg, 0);
+        if (comma >= rg.size())
+            return {0, "", false, "expected ',' after nibble expr in iso6 group"};
+
+        std::string nibble_part = trim_str(rg.substr(0, comma));
+        if (nibble_part.empty())
+            return {0, "", false, "empty nibble expression in iso6 group"};
+
+        size_t ppos = comma + 1;
+        auto read_double = [&]() -> double {
+            while (ppos < rg.size() && std::isspace(static_cast<unsigned char>(rg[ppos]))) ppos++;
+            size_t s = ppos;
+            while (ppos < rg.size() && rg[ppos] != ',' && rg[ppos] != ';') ppos++;
+            std::string token = rg.substr(s, ppos - s);
+            if (token.empty()) return std::numeric_limits<double>::quiet_NaN();
+            return std::stod(token);
+        };
+        double min_v = read_double();
+        if (ppos >= rg.size() || rg[ppos] != ',')
+            return {0, "", false, "expected ',' after min"};
+        ppos++;
+        double max_v = read_double();
+        if (ppos >= rg.size() || rg[ppos] != ',')
+            return {0, "", false, "expected ',' after max"};
+        ppos++;
+        double cnt_d = read_double();
+        if (ppos >= rg.size() || rg[ppos] != ',')
+            return {0, "", false, "expected ',' after count"};
+        ppos++;
+        double meb = read_double();
+
+        iso_configs.push_back(min_v);
+        iso_configs.push_back(max_v);
+        iso_configs.push_back(cnt_d);
+        iso_configs.push_back(meb);
+
+        if (gi > 0) all_nibbles.push_back(0xF);
+
+        Parser parser(nibble_part);
+        AstNode ast = parser.parse_expr();
+        if (!parser.error().ok) return parser.error();
+        EncodeResult tmp; tmp.ok = true;
+        check_compose_lin_inner(ast, false, tmp);
+        if (!tmp.ok) return tmp;
+
+        emit(ast, all_nibbles, all_params);
+    }
+
+    all_params.insert(all_params.end(), iso_configs.begin(), iso_configs.end());
+    reorder_sumqoi_lin(all_nibbles);
+
+    int nibble_qoi = nibbles_to_qoi(all_nibbles);
+    int final_qoi = 0x60000000 | nibble_qoi;
+
+    std::string qp;
+    if (!all_params.empty())
+        qp = base64_encode(all_params.data(), all_params.size() * sizeof(double));
+
+    return {final_qoi, qp, true, ""};
 }
 
 }  // namespace qoi_encode

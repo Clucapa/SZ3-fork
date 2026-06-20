@@ -1,4 +1,4 @@
-// qoi_encoder CLI -- thin wrapper around encode.hpp (nibble) and fx_encode.hpp (FX).
+// qoi_encoder CLI -- unified: tries nibble first, falls back to FX (SymEngine).
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -13,10 +13,11 @@ int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr,
             "Usage: %s \"expression\"\n"
-            "  nibble mode: lin sqr cubic sqrt exp xlogx log recip abs sin tanh pow\n"
-            "               Operators: + SumQoI, @ Compose, | MultiQoI\n"
+            "  nibble: lin sqr cubic sqrt exp xlogx log recip abs sin tanh pow\n"
+            "          Operators: + SumQoI, @ Compose, | MultiQoI\n"
+            "  isoline: iso6(nibble_expr, min, max, count, meb [; ...])\n"
 #ifdef QOI_ENCODER_HAS_FX
-            "  FX mode:     fx(\"sin(x)+x^2\") -- arbitrary math expression\n"
+            "  fallback: arbitrary math expressions (sin(x)+x^2, etc.) via SymEngine\n"
 #endif
             , argv[0]);
         return 1;
@@ -24,32 +25,37 @@ int main(int argc, char **argv) {
 
     std::string expr(argv[1]);
 
-    // Detect FX mode: fx("...")
-#ifdef QOI_ENCODER_HAS_FX
-    if (expr.size() > 4 && expr.substr(0, 3) == "fx(" && expr.back() == ')') {
-        std::string inner = expr.substr(3, expr.size() - 4);
-        // Strip quotes if present
-        if (inner.size() >= 2 && inner.front() == '"' && inner.back() == '"')
-            inner = inner.substr(1, inner.size() - 2);
-
-        auto r = qoi_encode::fx_encode(inner);
+    // Isoline mode: iso6(...) -- special syntax with isoline config params
+    if (expr.size() > 6 && expr.substr(0, 4) == "iso6" && expr.back() == ')') {
+        auto r = qoi_encode::iso6_encode(expr);
         if (!r.ok) {
-            fprintf(stderr, "FX Error: %s\n", r.error.c_str());
+            fprintf(stderr, "Iso6 Error: %s\n", r.error.c_str());
             return 1;
         }
         printf("qoi        = 0x%X\n", r.qoi);
         printf("qoiParams  = \"%s\"\n", r.qoiParams.c_str());
         return 0;
     }
-#endif
 
-    // Nibble mode
+    // Try nibble encoding first
     auto r = qoi_encode::encode(expr);
-    if (!r.ok) {
-        fprintf(stderr, "Error: %s\n", r.error.c_str());
-        return 1;
+    if (r.ok) {
+        printf("qoi        = 0x%X\n", r.qoi);
+        printf("qoiParams  = \"%s\"\n", r.qoiParams.c_str());
+        return 0;
     }
-    printf("qoi        = 0x%X\n", r.qoi);
-    printf("qoiParams  = \"%s\"\n", r.qoiParams.c_str());
-    return 0;
+
+#ifdef QOI_ENCODER_HAS_FX
+    // Fallback: SymEngine arbitrary function
+    auto fr = qoi_encode::fx_encode(expr);
+    if (fr.ok) {
+        printf("qoi        = 0x%X\n", fr.qoi);
+        printf("qoiParams  = \"%s\"\n", fr.qoiParams.c_str());
+        return 0;
+    }
+    fprintf(stderr, "Error: %s\n", fr.error.c_str());
+#else
+    fprintf(stderr, "Error: %s\n", r.error.c_str());
+#endif
+    return 1;
 }

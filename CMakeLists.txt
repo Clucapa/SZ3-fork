@@ -100,6 +100,7 @@ set(BUILD_SZ3_BINARY ON CACHE BOOL "build SZ3 tools" FORCE)
 if (BUILD_SZ3_BINARY)
     add_subdirectory(tools/sz3)
     add_subdirectory(tools/sz3c)
+    add_subdirectory(tools/qoi_encoder)
 endif ()
 
 # End-to-end test (CI gate)

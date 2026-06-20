@@ -86,9 +86,24 @@ static TestResult run_qoi_test(const QoiDef &qd, uint N, int algo, uint8_t ia,
             for (auto &v : data) v *= scale;
         }
     }
+    if (qd.min_abs > 0) {
+        for (auto &v : data)
+            if (std::fabs(v) < qd.min_abs) v = (v >= 0) ? qd.min_abs : -qd.min_abs;
+    }
     if (!sz3_test::data_ok_for_qoi(qd, data)) { r.fail_reason = "skip-domain"; return r; }
 
     auto conf = make_config(qd, N, algo, ia, dims);
+
+    // Use encoder to produce qoi/qoiParams (Regional QoIs use hardcoded id).
+    if (qd.expr) {
+        if (g_encoder_path.empty()) { r.fail_reason = "skip-no-encoder"; return r; }
+        int enc_qoi = 0; std::string enc_b64;
+        std::string err;
+        if (!call_encoder(qd.expr, enc_qoi, enc_b64, err))
+            { r.passed=false; r.fail_reason="encoder-error"; r.detail=err; return r; }
+        conf.qoi = enc_qoi;
+        conf.qoiParams = sz3_test::base64_decode_raw(enc_b64);
+    }
 
     // Skip if the hardcoded feval overflows on this data.
     if (qd.feval) {
@@ -135,18 +150,30 @@ static TestResult run_encoder_test(const EncoderTestCase &tc, uint N, int algo,
     TestResult r; size_t num = dims[0]; if (N>=2) num*=dims[1]; if (N>=3) num*=dims[2];
 
     auto data = generate_data(pat, N, num, dims);
+    if (tc.max_data > 0) {
+        double max_val = 0;
+        for (auto v : data) max_val = std::max(max_val, std::fabs(v));
+        if (max_val > tc.max_data) {
+            double scale = tc.max_data / max_val;
+            for (auto &v : data) v *= scale;
+        }
+    }
+    if (tc.min_abs > 0) {
+        for (auto &v : data)
+            if (std::fabs(v) < tc.min_abs) v = (v >= 0) ? tc.min_abs : -tc.min_abs;
+    }
     if (!data_ok_for_qoi_domain(tc.domain, data.data(), num)) { r.fail_reason = "skip-domain"; return r; }
 
     // Call external encoder binary to get qoi + qoiParams.
-    int qoi_val = 0; std::string qoi_params;
+    int qoi_val = 0; std::string qoi_params_b64;
     if (g_encoder_path.empty()) { r.fail_reason = "skip-no-encoder"; return r; }
     std::string err;
-    if (!call_encoder(tc.expr, qoi_val, qoi_params, err))
+    if (!call_encoder(tc.expr, qoi_val, qoi_params_b64, err))
         { r.passed=false; r.fail_reason="encoder-error"; r.detail=err; return r; }
 
     // Build Config from encoder output and test case parameters.
     Config conf(num); conf.setDims(dims.begin(), dims.begin()+N);
-    conf.qoi = qoi_val; conf.qoiParams = qoi_params;
+    conf.qoi = qoi_val;     conf.qoiParams = sz3_test::base64_decode_raw(qoi_params_b64);
     conf.qEB = tc.qEB; conf.absErrorBound = tc.absErrorBound; conf.quantbinCnt = 65536; conf.qR = 32;
     switch (algo) {
         case TALGO_BLOCK: conf.cmprAlgo=ALGO_LORENZO_REG; conf.lorenzo=true; conf.lorenzo2=false; conf.regression=false; break;

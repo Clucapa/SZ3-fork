@@ -13,10 +13,12 @@
 #define SZ3_Config_HPP
 
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <numeric>
+#include <string>
 #include <vector>
 
 #include "SZ3/def.hpp"
@@ -36,6 +38,52 @@
 #define SZ_INT64 9
 
 namespace SZ3 {
+
+static const char kBase64Table[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+inline std::string base64_encode(const void *data, size_t len) {
+    const auto *p = static_cast<const unsigned char *>(data);
+    std::string out;
+    out.reserve(((len + 2) / 3) * 4);
+    for (size_t i = 0; i < len; i += 3) {
+        unsigned b0 = p[i], b1 = (i+1 < len) ? p[i+1] : 0, b2 = (i+2 < len) ? p[i+2] : 0;
+        out += kBase64Table[b0 >> 2];
+        out += kBase64Table[((b0 & 3) << 4) | (b1 >> 4)];
+        out += (i+1 < len) ? kBase64Table[((b1 & 0xF) << 2) | (b2 >> 6)] : '=';
+        out += (i+2 < len) ? kBase64Table[b2 & 0x3F] : '=';
+    }
+    return out;
+}
+
+inline std::vector<unsigned char> base64_decode(const std::string &in) {
+    if (in.empty()) return {};
+    auto val = [](char c) -> unsigned char {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return 0xFF;
+    };
+    std::vector<unsigned char> out;
+    out.reserve((in.size() * 3) / 4 + 1);
+    size_t i = 0;
+    for (; i + 4 <= in.size(); i += 4) {
+        unsigned char a = val(in[i]), b = val(in[i + 1]);
+        if (a == 0xFF || b == 0xFF) break;
+        out.push_back((a << 2) | (b >> 4));
+        if (in[i + 2] == '=') { out.push_back((b << 4)); break; }
+        unsigned char c = val(in[i + 2]);
+        if (c == 0xFF) break;
+        out.push_back((b << 4) | (c >> 2));
+        if (in[i + 3] == '=') break;
+        unsigned char d = val(in[i + 3]);
+        if (d == 0xFF) break;
+        out.push_back((c << 6) | d);
+    }
+    return out;
+}
 
 /**
  * @enum EB
@@ -273,7 +321,7 @@ class Config {
                 else if (eq(key, "qoiEB"))
                     qEB = std::stod(value);
                 else if (eq(key, "qoiParams"))
-                    qoiParams = value;
+                    qoiParams = base64_decode(value);
                 else if (eq(key, "qoiQuantbinCnt"))
                     qR = std::stoi(value);
             }
@@ -313,7 +361,7 @@ class Config {
         ss << "\n[QoISettings]\n";
         ss << "qoi = " << qoi << "\n";
         ss << "qoiEB = " << qEB << "\n";
-        ss << "qoiParams = " << qoiParams << "\n";
+        ss << "qoiParams = " << base64_encode(qoiParams.data(), qoiParams.size()) << "\n";
         ss << "qoiQuantbinCnt = " << qR << "\n";
 
         return ss.str();
@@ -447,7 +495,7 @@ class Config {
             uint32_t plen = 0;
             read(plen, c);
             if (plen && c + plen <= c1) {
-                qoiParams.assign(reinterpret_cast<const char*>(c), plen);
+                qoiParams.assign(c, c + plen);
                 c += plen;
             }
         }
@@ -521,7 +569,7 @@ class Config {
     int qoi = 0;
     double qEB = 1.0;
     int qR = 128;
-    std::string qoiParams;
+    std::vector<unsigned char> qoiParams;
     std::vector<double> ebs;
 };
 
