@@ -420,15 +420,13 @@ inline EncodeResult iso6_encode(const std::string &expr) {
     return {final_qoi, qp, true, ""};
 }
 
-// Wrap a pointwise EncodeResult as Regional (Block or Interp, nibble or FX).
-inline EncodeResult make_regional(const EncodeResult &er, bool is_interp, bool is_fx) {
+// Wrap a pointwise EncodeResult as Regional (nibble or FX).
+inline EncodeResult make_regional(const EncodeResult &er, bool is_fx) {
     int raw;
     if (is_fx) {
         raw = 0x30000000;
-        if (is_interp) raw = 0x70000000;
     } else {
         raw = er.qoi & 0x0FFFFFFF;
-        if (is_interp) raw |= 0x40000000;
     }
     return {~raw, er.qoiParams, er.ok, er.error};
 }

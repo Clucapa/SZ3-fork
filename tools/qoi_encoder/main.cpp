@@ -10,12 +10,11 @@
 #endif
 
 int main(int argc, char **argv) {
-    bool is_regional = false, is_interp = false;
+    bool is_regional = false;
     const char *expr = nullptr;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--regional")) is_regional = true;
-        else if (!strcmp(argv[i], "--interp")) is_interp = true;
         else if (argv[i][0] == '-') {
             fprintf(stderr, "Unknown flag: %s\n", argv[i]);
             return 1;
@@ -26,15 +25,14 @@ int main(int argc, char **argv) {
 
     if (!expr) {
         fprintf(stderr,
-            "Usage: %s [--regional] [--interp] \"expression\"\n"
+            "Usage: %s [--regional] \"expression\"\n"
             "  nibble:    lin sqr cubic sqrt exp xlogx log recip abs sin tanh pow\n"
             "             Operators: + SumQoI, @ Compose, | MultiQoI\n"
             "  isoline:   iso6(nibble_expr, min, max, count, meb [; ...])\n"
 #ifdef QOI_ENCODER_HAS_FX
             "  fallback:  arbitrary math expressions (sin(x)+x^2, etc.) via SymEngine\n"
 #endif
-            "  --regional  wrap output as Regional (Block by default)\n"
-            "  --interp    use Interp path (with --regional)\n"
+            "  --regional  wrap output as Regional\n"
             , argv[0]);
         return 1;
     }
@@ -73,7 +71,7 @@ int main(int argc, char **argv) {
     }
 
     if (is_regional) {
-        r = qoi_encode::make_regional(r, is_interp, is_fx);
+        r = qoi_encode::make_regional(r, is_fx);
         if (!r.ok) { fprintf(stderr, "Error: %s\n", r.error.c_str()); return 1; }
     }
 

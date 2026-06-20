@@ -81,7 +81,7 @@ include/SZ3/qoi/
 ├── QoIIf.hpp                        工厂 GetQOI + nibble 解析器 + ParamReader + Regional 新编码
 ├── QoI_IsolineNibble.hpp            Isoline 模式（mode 6，等值线约束叠加子 QoI）
 ├── QoI_FX.hpp                       FX 模式（mode 7，TinyExpr 任意函数）
-├── RegionalNibble.hpp               Regional 新编码（nibble/FX + Block/Interp 分派）
+├── RegionalNibble.hpp               Regional 新编码（nibble/FX，Block/Interp 在压缩器算法层区分）
 ├── EBProvider.hpp                   EBProvider 抽象接口
 ├── PointwiseEBProvider.hpp          点态 eb 源
 ├── MultiQoIEBProvider.hpp           多 provider min 组合
@@ -90,8 +90,8 @@ include/SZ3/qoi/
 ├── QoI_SumQoI.hpp                   组内求和约束（Σ fi，数值导数推 eb）
 ├── QoI_MultiQoI.hpp                 多组 AND 约束（取 min eb）
 ├── QoI_Compose.hpp                  函数嵌套 Compose(f,g) = f(g(x))
-├── RegionalMean.hpp / RegionalMeanSq.hpp            blockwise Regional QoI
-├── QoI_RegionalAvgInterp.hpp / QoI_RegionalMeanSqInterp.hpp   Interp 路径专用 QoI
+├── RegionalMean.hpp / RegionalMeanSq.hpp            blockwise Regional QoI（遗留，已由 RegionalNibble 取代）
+├── QoI_RegionalAvgInterp.hpp / QoI_RegionalMeanSqInterp.hpp   Interp 路径专用 QoI（遗留）
 │
 include/SZ3/decomposition/
 ├── QpetBlockDecomp.hpp              块级分解器（Lorenzo/Regression）

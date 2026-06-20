@@ -21,8 +21,10 @@ public:
     }
 
     T interpret_eb(T x) const override {
-        if (tol_ >= 2.0) return geb_;
-        return std::min(static_cast<T>(tol_), geb_);
+        double c = std::cos(static_cast<double>(x));
+        if (std::abs(c) < 1e-15) return std::min(static_cast<T>(tol_), geb_);
+        T eb = static_cast<T>(tol_ / std::abs(c));
+        return std::min(eb, geb_);
     }
 
     std::unique_ptr<concepts::EBProvider<T>> create_eb_provider(

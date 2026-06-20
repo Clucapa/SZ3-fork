@@ -147,28 +147,27 @@ int main(int argc, char **argv) {
     // ====== Regional tests (--regional flag, or included in --full) ======
     if (regional_only || !basic) {
         using namespace SZ3;
-        struct { const char *label, *expr; bool interp; double qEB; int qoi_expected; }
+        struct { const char *label, *expr; double qEB; int qoi_expected;
+                 double (*feval)(double); }
         rt[] = {
-            {"RegLin",      "sqr",        false, 1.0,   ~(0x00000001)},
-            {"RegCubic",    "cubic",      false, 1.0,   ~(0x00000002)},
-            {"RegAbs",      "abs",        false, 1.0,   ~(0x00000008)},
-            {"RegSqrt",     "sqrt",       false, 0.1,   ~(0x00000003)},
-            {"RegSum",      "sqr+cubic",  false, 1.0,   ~(0x00000012)},
-            {"RegInterpLin","sqr",        true,  1.0,   ~(0x40000001)},
-            {"RegInterpCub","cubic",      true,  1.0,   ~(0x40000002)},
+            {"RegLin",      "sqr",        1.0,   ~(0x00000001),  nullptr},
+            {"RegCubic",    "cubic",      1.0,   ~(0x00000002),  nullptr},
+            {"RegAbs",      "abs",        1.0,   ~(0x00000008),  nullptr},
+            {"RegSqrt",     "sqrt",       0.1,   ~(0x00000003),  nullptr},
+            {"RegSum",      "sqr+cubic",  1.0,   ~(0x00000012),  nullptr},
+            {"RegFX_SinX2", "sin(x)+x^2", 1.0,   ~(0x30000000),
+                [](double x) { return std::sin(x) + x*x; }},
+            {"RegFX_SqrtExp","sqrt(x)+exp(-x)", 1.0, ~(0x30000000),
+                [](double x) { return std::sqrt(x) + std::exp(-x); }},
         };
         for (auto &tc : rt) {
             if (g_encoder_path.empty()) { total += 2; skipped += 2; continue; }
-            std::string flags = "--regional";
-            if (tc.interp) flags += " --interp";
             int eq = 0; std::string ep; std::string err;
-            if (!call_encoder(tc.expr, eq, ep, err, flags))
+            if (!call_encoder(tc.expr, eq, ep, err, "--regional"))
                 { total+=2; skipped+=2; continue; }
             size_t nx = dim_size(1, size_idx);
             std::array<size_t,3> ds{nx, 32, 18};
             for (int a : {TALGO_BLOCK, TALGO_INTERP}) {
-                if (tc.interp && a == TALGO_BLOCK) { total++; skipped++; continue; }
-                if (!tc.interp && a == TALGO_INTERP) { total++; skipped++; continue; }
                 Config conf(nx); conf.setDims(ds.begin(), ds.begin()+1);
                 conf.qoi = eq; conf.qoiParams = sz3_test::base64_decode_raw(ep);
                 conf.qEB = tc.qEB; conf.absErrorBound = 10.0;
@@ -182,8 +181,15 @@ int main(int argc, char **argv) {
                 double *dec = roundtrip_compress(conf, data.data(), nx, unused, r);
                 if (dec) {
                     double agg = 0;
-                    for (size_t i = 0; i < nx; i++) agg += std::fabs(data[i] - dec[i]);
-                    agg /= nx;
+                    if (tc.feval) {
+                        double sum_err = 0;
+                        for (size_t i = 0; i < nx; i++)
+                            sum_err += tc.feval(data[i]) - tc.feval(dec[i]);
+                        agg = std::fabs(sum_err) / nx;
+                    } else {
+                        for (size_t i = 0; i < nx; i++) agg += std::fabs(data[i] - dec[i]);
+                        agg /= nx;
+                    }
                     r.passed = (agg <= tc.qEB * (1.0 + 1e-8));
                     if (!r.passed) r.fail_reason = "qoi-regional";
                     r.max_qoi = agg;

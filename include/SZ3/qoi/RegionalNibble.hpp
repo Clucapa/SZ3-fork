@@ -13,9 +13,8 @@ namespace SZ3 {
 template <class T, uint N>
 class QoI_RegionalNibble : public concepts::QoIIf<T, N> {
 public:
-    QoI_RegionalNibble(double tol, T geb, std::shared_ptr<concepts::QoIIf<T, N>> sub,
-                        bool is_interp)
-        : tol_(tol), geb_(geb), sub_(std::move(sub)), is_interp_(is_interp) {
+    QoI_RegionalNibble(double tol, T geb, std::shared_ptr<concepts::QoIIf<T, N>> sub)
+        : tol_(tol), geb_(geb), sub_(std::move(sub)) {
         concepts::QoIIf<T, N>::id = ~0;
     }
 
@@ -80,7 +79,6 @@ private:
     double tol_;
     T geb_;
     std::shared_ptr<concepts::QoIIf<T, N>> sub_;
-    bool is_interp_;
     double error_ = 0;
     size_t rest_elements_ = 0;
     size_t block_elements_ = 0;

@@ -25,7 +25,7 @@ cmake --build build --parallel $(nproc)
 # 仅 Isoline
 ./test/bin/e2e --isoline --encoder-path=./test/bin/qoi_encoder
 
-# 仅 Regional 新编码
+# 仅 Regional
 ./test/bin/e2e --regional --encoder-path=./test/bin/qoi_encoder
 
 # 仅编码器往返（自定义参数 + FX + Iso6）

@@ -23,10 +23,6 @@
 #include "SZ3/qoi/QoI_MultiQoI.hpp"
 #include "SZ3/qoi/QoI_Compose.hpp"
 #include "SZ3/qoi/QoI_FX.hpp"
-#include "SZ3/qoi/RegionalMean.hpp"
-#include "SZ3/qoi/RegionalMeanSq.hpp"
-#include "SZ3/qoi/QoI_RegionalAvgInterp.hpp"
-#include "SZ3/qoi/QoI_RegionalMeanSqInterp.hpp"
 #include "SZ3/qoi/QoI_IsolineNibble.hpp"
 #include "SZ3/qoi/RegionalNibble.hpp"
 #include "SZ3/utils/Config.hpp"
@@ -241,19 +237,17 @@ std::shared_ptr<concepts::QoIIf<T, N>> GetQOI(const Config &conf) {
 
     if (conf.qoi < 0) {
         int raw = ~conf.qoi;
-        bool is_interp = (raw >> 30) & 1;
-        bool use_fx    = ((raw >> 28) & 0x3) == 0x3;
-        int nib_qoi    = raw & 0x0FFFFFFF;
+        bool use_fx = ((raw >> 28) & 0x3) == 0x3;
+        int nib_qoi = raw & 0x0FFFFFFF;
 
-        // Raw nibble values 0-3 map to XLin(0/2) or sqr(1/3), Block or Interp
-        if (!is_interp && !use_fx && raw < 4) {
-            is_interp = (raw >= 2);
-            nib_qoi   = (raw & 1);
-        }
+        if (!use_fx && raw < 4)
+            nib_qoi = raw & 1;
 
         if (use_fx) {
+            auto fx = std::make_shared<QoI_FX<T, N>>(
+                conf.qEB, conf.absErrorBound, conf.qoiParams);
             return std::make_shared<QoI_RegionalNibble<T, N>>(
-                conf.qEB, conf.absErrorBound, nullptr, is_interp);
+                conf.qEB, conf.absErrorBound, fx);
         }
 
         auto groups = detail::parse_qoi_nibbles(nib_qoi);
@@ -269,10 +263,11 @@ std::shared_ptr<concepts::QoIIf<T, N>> GetQOI(const Config &conf) {
             sub = std::make_shared<QoI_XLin<T, N>>(conf.qEB, conf.absErrorBound);
 
         return std::make_shared<QoI_RegionalNibble<T, N>>(
-            conf.qEB, conf.absErrorBound, sub, is_interp);
+            conf.qEB, conf.absErrorBound, sub);
     }
 
-    if (((conf.qoi >> 28) & 0xF) != 0) return nullptr;
+    if (((conf.qoi >> 28) & 0xF) != 0)
+        throw std::invalid_argument("Unknown QOI high nibble: " + std::to_string((conf.qoi >> 28) & 0xF));
     return detail::assemble_from_nibbles<T, N>(conf);
 }
 

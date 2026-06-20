@@ -4,23 +4,23 @@
 
 ```
 bit:  31 30 29 28 27 ... 0
-      [0][B][FX][FX] [nibble_qoi]
+      固定0 预留 FX 标志 [nibble_qoi]
 
-B:   0 = Block, 1 = Interp
+bit30: 预留（置 0）
 FX:  00 = nibble 函数, 11 = FX 函数
      (01, 10 预留)
 ```
 
 翻转后存储：`conf.qoi = ~raw`
 
+Block/Interp 区别在压缩器算法层（cmprAlgo），QoI 层不区分。
+
 ## 编码类型表
 
 | 类型 | 翻转前 raw | 翻转后 conf.qoi | 高nibble(翻转后) | qoiParams |
 |------|-----------|-----------------|:--:|------|
-| RegionalMean(nibble) | `0x0nnnnnnn` | `0xFn¬n¬n¬n¬n` | F | nibble params |
-| RegionalMean(FX) | `0x30nnnnnnn` | `0xCn¬n¬n¬n¬n` | C | FX binary |
-| RegionalInterp(nibble) | `0x40nnnnnnn` | `0xBn¬n¬n¬n¬n` | B | nibble params |
-| RegionalInterp(FX) | `0x70nnnnnnn` | `0x8n¬n¬n¬n¬n` | 8 | FX binary |
+| Regional nibble | `0x0nnnnnnn` | `0xFn¬n¬n¬n¬n` | F | nibble params |
+| Regional FX | `0x30000000` | `0xCFFFFFFF` | C | FX binary |
 
 (¬ 表示位翻转)
 
@@ -58,28 +58,26 @@ RegionalFX(sin(x)+x²):
 ```cpp
 if (conf.qoi < 0) {
     int raw = ~conf.qoi;
-    bool is_interp = (raw >> 30) & 1;
-    bool use_fx    = ((raw >> 28) & 0x3) == 0x3;
-    int  nib_qoi   = raw & 0x0FFFFFFF;
+    bool use_fx  = ((raw >> 28) & 0x3) == 0x3;
+    int  nib_qoi = raw & 0x0FFFFFFF;
+
+    if (!use_fx && raw < 4)
+        nib_qoi = raw & 1;  // 遗留映射: 0/1/2/3 → XLin/sq
 
     if (use_fx) {
-        // 解析 conf.qoiParams → f(x) TinyExpr → RegionalFX 实例
-        return makeRegionalFX(conf, is_interp);
+        auto fx = make_shared<QoI_FX>(conf.qEB, conf.absErrorBound, conf.qoiParams);
+        return make_shared<QoI_RegionalNibble>(conf.qEB, conf.absErrorBound, fx);
     }
 
-    // nibble 模式
     auto groups = parse_qoi_nibbles(nib_qoi);
     if (groups.empty())
-        groups.push_back(QoIGroup{});  // 退化为 XLin(1,0)
+        groups.push_back(QoIGroup{});
     ParamReader params(conf.qoiParams);
-    auto sub_qoi = groups.size() == 1
+    auto sub = groups.size() == 1
         ? assemble_group(groups[0], params, conf.qEB, conf.absErrorBound)
-        : ...;  // MultiQoI
+        : assemble_from_nibbles(conf);
 
-    if (is_interp)
-        return makeRegionalInterp(sub_qoi);
-    else
-        return makeRegionalMean(sub_qoi);
+    return make_shared<QoI_RegionalNibble>(conf.qEB, conf.absErrorBound, sub);
 }
 ```
 
