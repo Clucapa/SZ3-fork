@@ -10,52 +10,74 @@
 #endif
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
+    bool is_regional = false, is_interp = false;
+    const char *expr = nullptr;
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--regional")) is_regional = true;
+        else if (!strcmp(argv[i], "--interp")) is_interp = true;
+        else if (argv[i][0] == '-') {
+            fprintf(stderr, "Unknown flag: %s\n", argv[i]);
+            return 1;
+        } else {
+            expr = argv[i];
+        }
+    }
+
+    if (!expr) {
         fprintf(stderr,
-            "Usage: %s \"expression\"\n"
-            "  nibble: lin sqr cubic sqrt exp xlogx log recip abs sin tanh pow\n"
-            "          Operators: + SumQoI, @ Compose, | MultiQoI\n"
-            "  isoline: iso6(nibble_expr, min, max, count, meb [; ...])\n"
+            "Usage: %s [--regional] [--interp] \"expression\"\n"
+            "  nibble:    lin sqr cubic sqrt exp xlogx log recip abs sin tanh pow\n"
+            "             Operators: + SumQoI, @ Compose, | MultiQoI\n"
+            "  isoline:   iso6(nibble_expr, min, max, count, meb [; ...])\n"
 #ifdef QOI_ENCODER_HAS_FX
-            "  fallback: arbitrary math expressions (sin(x)+x^2, etc.) via SymEngine\n"
+            "  fallback:  arbitrary math expressions (sin(x)+x^2, etc.) via SymEngine\n"
 #endif
+            "  --regional  wrap output as Regional (Block by default)\n"
+            "  --interp    use Interp path (with --regional)\n"
             , argv[0]);
         return 1;
     }
 
-    std::string expr(argv[1]);
+    std::string expr_str(expr);
 
-    // Isoline mode: iso6(...) -- special syntax with isoline config params
-    if (expr.size() > 6 && expr.substr(0, 4) == "iso6" && expr.back() == ')') {
-        auto r = qoi_encode::iso6_encode(expr);
-        if (!r.ok) {
-            fprintf(stderr, "Iso6 Error: %s\n", r.error.c_str());
+    // Isoline mode
+    if (expr_str.size() > 6 && expr_str.substr(0, 4) == "iso6" && expr_str.back() == ')') {
+        if (is_regional) {
+            fprintf(stderr, "Error: --regional cannot be combined with iso6\n");
             return 1;
         }
+        auto r = qoi_encode::iso6_encode(expr_str);
+        if (!r.ok) { fprintf(stderr, "Iso6 Error: %s\n", r.error.c_str()); return 1; }
         printf("qoi        = 0x%X\n", r.qoi);
         printf("qoiParams  = \"%s\"\n", r.qoiParams.c_str());
         return 0;
     }
 
-    // Try nibble encoding first
-    auto r = qoi_encode::encode(expr);
-    if (r.ok) {
-        printf("qoi        = 0x%X\n", r.qoi);
-        printf("qoiParams  = \"%s\"\n", r.qoiParams.c_str());
-        return 0;
-    }
+    // Try nibble encoding
+    auto r = qoi_encode::encode(expr_str);
+    bool is_fx = false;
 
+    if (!r.ok) {
 #ifdef QOI_ENCODER_HAS_FX
-    // Fallback: SymEngine arbitrary function
-    auto fr = qoi_encode::fx_encode(expr);
-    if (fr.ok) {
-        printf("qoi        = 0x%X\n", fr.qoi);
-        printf("qoiParams  = \"%s\"\n", fr.qoiParams.c_str());
-        return 0;
-    }
-    fprintf(stderr, "Error: %s\n", fr.error.c_str());
+        r = qoi_encode::fx_encode(expr_str);
+        is_fx = true;
+        if (!r.ok) {
+            fprintf(stderr, "Error: %s\n", r.error.c_str());
+            return 1;
+        }
 #else
-    fprintf(stderr, "Error: %s\n", r.error.c_str());
+        fprintf(stderr, "Error: %s\n", r.error.c_str());
+        return 1;
 #endif
-    return 1;
+    }
+
+    if (is_regional) {
+        r = qoi_encode::make_regional(r, is_interp, is_fx);
+        if (!r.ok) { fprintf(stderr, "Error: %s\n", r.error.c_str()); return 1; }
+    }
+
+    printf("qoi        = 0x%X\n", r.qoi);
+    printf("qoiParams  = \"%s\"\n", r.qoiParams.c_str());
+    return 0;
 }

@@ -17,13 +17,16 @@ cmake --build build --parallel $(nproc)
 
 ```bash
 # 基础门禁（QOI 矩阵 + 剪枝，约 1s）
-./test/bin/e2e --basic --encoder-path=./test/bin/qoi_encoder --encoder-path=./test/bin/qoi_encoder
+./test/bin/e2e --basic --encoder-path=./test/bin/qoi_encoder
 
-# 全量测试（QOI 矩阵 + 编码器往返 + Isoline，约 2min）
+# 全量测试（QOI 矩阵 + 编码器往返 + Isoline + Regional，约 2min）
 ./test/bin/e2e --full --encoder-path=./test/bin/qoi_encoder
 
 # 仅 Isoline
-./test/bin/e2e --isoline --encoder-path=./test/bin/qoi_encoder --encoder-path=./test/bin/qoi_encoder
+./test/bin/e2e --isoline --encoder-path=./test/bin/qoi_encoder
+
+# 仅 Regional 新编码
+./test/bin/e2e --regional --encoder-path=./test/bin/qoi_encoder
 
 # 仅编码器往返（自定义参数 + FX + Iso6）
 ./test/bin/e2e --compose --encoder-path=./test/bin/qoi_encoder
@@ -142,41 +145,40 @@ cmake --build build --parallel $(nproc)
 
 | 标签 | 表达式 | f(x) | Domain |
 |------|--------|------|--------|
-| FX_SinX2 | `fx("sin(x)+x^2")` | sin(x)+x² | 全域 |
-| FX_SqrtExp | `fx("sqrt(x)+exp(-x)")` | √x+e^(-x) | x≥0 |
-| FX_X3_2X_1 | `fx("x^3+2*x+1")` | x³+2x+1 | 全域 |
+| FX_SinX2 | `sin(x)+x^2` | sin(x)+x² | 全域 |
+| FX_SqrtExp | `sqrt(x)+exp(-x)` | √x+e^(-x) | x≥0 |
+| FX_X3_2X_1 | `x^3+2*x+1` | x³+2x+1 | 全域 |
 
 ---
 
-### 三、Isoline 测试（`e2e --isoline`，2 用例 × 2 维 × 8 模式 × 3 算法 = 96 条）
+### 三、Isoline 测试（`e2e --isoline` / `--full`，2 用例 × 2 维 × 8 模式 × 3 算法 = 96 条）
 
-Hardcoded qoi/qoiParams，独立验证等值线合规性（禁止数据穿越 isovalue 线）：
+经 encoder 生成 iso6 表达式，验证等值线不穿越：
 
-| 标签 | qoi | Isoline 配置 | 子 QoI | qEB | absEB |
-|------|-----|-------------|--------|-----|-------|
-| Iso6-XLin | 0x60000000 | [-5,5] cnt=3 meb=0.01 | XLin (恒等) | 5.0 | 10.0 |
-| Iso6-X2 | 0x60000001 | [-5,5] cnt=3 meb=0.01 | X2 (x²) | 5.0 | 10.0 |
+| 标签 | 表达式 | 子 QoI | qEB | absEB |
+|------|--------|--------|-----|-------|
+| Iso6-XLin | `iso6(lin, -5, 5, 3, 0.01)` | lin (恒等) | 5.0 | 10.0 |
+| Iso6-X2 | `iso6(sqr, -5, 5, 3, 0.01)` | sqr (x²) | 5.0 | 10.0 |
 
 算法：Block / Interp-Cubic / Interp-Linear。维数：1D、2D。
 
 ---
 
-### 四、Isoline 编码器往返测试（`e2e --compose`，内置，9 表达式 × 2 模式 × 2 算法 = 36 条）
+### 四、Regional 新编码测试（`e2e --regional` / `--full`，7 表达式 × 1 算法 = 14 条）
 
-通过 encoder 生成 iso6 表达式，验证子 QoI 点态合规：
+通过 encoder `--regional [--interp]` 编码，验证 `|mean(f(orig)) - mean(f(dec))| ≤ qEB`：
 
-| 标签 | 表达式 | 子 QoI | qEB | Domain |
-|------|--------|--------|-----|--------|
-| Iso6Sqr | `iso6(sqr, -5, 5, 3, 0.01)` | sqr | 1.0 | 全域 |
-| Iso6Sqrt | `iso6(sqrt, 0, 10, 3, 0.001)` | sqrt | 0.1 | x≥0 |
-| Iso6Abs | `iso6(abs, -3, 3, 3, 0.001)` | abs | 1.0 | 全域 |
-| Iso6Cubic | `iso6(cubic, -5, 5, 3, 0.01)` | cubic | 1.0 | 全域 |
-| Iso6Sin | `iso6(sin, -1, 1, 3, 0.001)` | sin | 0.1 | 全域 |
-| Iso6Exp | `iso6(exp, 0, 5, 3, 0.001)` | exp | 1.0 | 全域 |
-| Iso6Sum | `iso6(sqr+cubic, -5, 5, 3, 0.01)` | sqr+cubic | 1.0 | 全域 |
-| Iso6Multi | `iso6(sqr,-5,5,3,0.01;abs,-3,3,3,0.001)` | sqr & abs | 1.0 / 1.0 | 全域 |
+| 标签 | 表达式 | 路径 | qEB |
+|------|--------|:--:|-----|
+| RegLin | `--regional sqr` | Block | 1.0 |
+| RegCubic | `--regional cubic` | Block | 1.0 |
+| RegAbs | `--regional abs` | Block | 1.0 |
+| RegSqrt | `--regional sqrt` | Block | 0.1 |
+| RegSum | `--regional sqr+cubic` | Block | 1.0 |
+| RegInterpLin | `--regional --interp sqr` | Interp | 1.0 |
+| RegInterpCub | `--regional --interp cubic` | Interp | 1.0 |
 
----
+> 旧 `~0`/`~1`/`~2`/`~3` 在 QOI 矩阵的 legacy switch 中保持兼容。
 
 ### 五、数据模式
 

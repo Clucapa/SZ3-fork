@@ -28,6 +28,7 @@
 #include "SZ3/qoi/QoI_RegionalAvgInterp.hpp"
 #include "SZ3/qoi/QoI_RegionalMeanSqInterp.hpp"
 #include "SZ3/qoi/QoI_IsolineNibble.hpp"
+#include "SZ3/qoi/RegionalNibble.hpp"
 #include "SZ3/utils/Config.hpp"
 
 namespace SZ3 {
@@ -239,19 +240,36 @@ std::shared_ptr<concepts::QoIIf<T, N>> GetQOI(const Config &conf) {
     }
 
     if (conf.qoi < 0) {
-        int rid = ~conf.qoi;
-        switch (rid) {
-            case 0:
-                return std::make_shared<QoI_RegionalMean<T, N>>(conf.qEB, conf.absErrorBound);
-            case 1:
-                return std::make_shared<QoI_RegionalMeanSq<T, N>>(conf.qEB, conf.absErrorBound);
-            case 2:
-                return std::make_shared<QoI_RegionalAvgInterp<T, N>>(conf.qEB, conf.absErrorBound);
-            case 3:
-                return std::make_shared<QoI_RegionalMeanSqInterp<T, N>>(conf.qEB, conf.absErrorBound);
-            default:
-                return nullptr;
+        int raw = ~conf.qoi;
+        bool is_interp = (raw >> 30) & 1;
+        bool use_fx    = ((raw >> 28) & 0x3) == 0x3;
+        int nib_qoi    = raw & 0x0FFFFFFF;
+
+        // Raw nibble values 0-3 map to XLin(0/2) or sqr(1/3), Block or Interp
+        if (!is_interp && !use_fx && raw < 4) {
+            is_interp = (raw >= 2);
+            nib_qoi   = (raw & 1);
         }
+
+        if (use_fx) {
+            return std::make_shared<QoI_RegionalNibble<T, N>>(
+                conf.qEB, conf.absErrorBound, nullptr, is_interp);
+        }
+
+        auto groups = detail::parse_qoi_nibbles(nib_qoi);
+        if (groups.empty())
+            groups.push_back(detail::QoIGroup{});
+
+        detail::ParamReader params(conf.qoiParams);
+        auto sub = groups.size() == 1
+            ? detail::assemble_group<T, N>(groups[0], params, conf.qEB, conf.absErrorBound)
+            : detail::assemble_from_nibbles<T, N>(conf);  // fallback for multi-group
+
+        if (!sub)
+            sub = std::make_shared<QoI_XLin<T, N>>(conf.qEB, conf.absErrorBound);
+
+        return std::make_shared<QoI_RegionalNibble<T, N>>(
+            conf.qEB, conf.absErrorBound, sub, is_interp);
     }
 
     if (((conf.qoi >> 28) & 0xF) != 0) return nullptr;

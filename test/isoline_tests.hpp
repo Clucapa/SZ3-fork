@@ -60,7 +60,8 @@ static TestResult run_isoline_test(const IsolineTestCase &tc, uint N,
 
     // Use encoder to produce qoi/qoiParams
     extern std::string g_encoder_path;
-    extern bool call_encoder(const std::string &, int &, std::string &, std::string &);
+    extern bool call_encoder(const std::string &, int &, std::string &, std::string &,
+                              const std::string &extra_flags = "");
     if (g_encoder_path.empty()) { r.fail_reason = "skip-no-encoder"; return r; }
     int enc_qoi = 0; std::string enc_b64; std::string err;
     if (!call_encoder(tc.expr, enc_qoi, enc_b64, err))

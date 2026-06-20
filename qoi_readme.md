@@ -256,20 +256,61 @@ qoiParams = base64([e,   0, 5, 3, 0.001])
 
 ---
 
-## Regional QoI（~ 翻转标记）
+## Regional QoI（~ 翻转 + nibble/FX 编码）
 
-Regional QoI 使用 `conf.qoi < 0` 判断。编号为独立 ID，通过 `~` 翻转存入 `qoi`：
+Regional QoI 使用 `conf.qoi < 0` 判断。翻转后的高位 nibble 为 `0xF`、`0xE`、`0xC`、`0x8` 之一。
 
-| Regional ID | `conf.qoi` | QoI 类 | 约束 | 路径 |
-|-------------|-----------|--------|------|------|
-| 0 | `~0` | RegionalMean | \|mean(orig) - mean(dec)\| ≤ qEB | blockwise |
-| 1 | `~1` | RegionalMeanSq | \|mean(orig²) - mean(dec²)\| ≤ qEB | blockwise |
-| 2 | `~2` | RegionalAvgInterp | 同 RegionalMean | interp |
-| 3 | `~3` | RegionalMeanSqInterp | 同 RegionalMeanSq | interp |
+### 翻转前语义位布局
 
-Regional QoI 的 `qoiParams` 为空串（无额外参数）。约束由 `qEB` 控制。
+```
+bit 31: 固定 0（翻转后变成 1，保证 qoi<0）
+bit 30: 0=Block, 1=Interp
+bit 29-28: 00=nibble 函数, 11=FX 函数
+bit 27-0: nibble 编码（FX 时全零）
+```
 
-解码时工厂先检查 `qoi < 0`，再对 `~qoi`（翻转回正数）做 switch dispatch。高位 nibble 此时为 `0xF`（翻转产生），但此非显式编码的模式标记，而是 `if (qoi < 0)` 分支在 dispatch 中优先于 nibble 检查。
+翻转后存入 `conf.qoi = ~raw`。工厂见 `qoi<0` 翻转回 `raw`，提取 bit30/29-28 等字段。
+
+### 编码类型
+
+| 类型 | 翻转前 | 翻转后 | 高nibble | qoiParams |
+|------|--------|--------|:--:|------|
+| Regional(Block, nibble) | `0x00000000` | `~(0x00...)` | F | nibble func params |
+| Regional(Block, FX) | `0x30000000` | `~(0x30...)` | C | FX binary (f/df/ddf) |
+| Regional(Interp, nibble) | `0x40000000` | `~(0x40...)` | B | nibble func params |
+| Regional(Interp, FX) | `0x70000000` | `~(0x70...)` | 8 | FX binary (f/df/ddf) |
+
+### nibble 模式示例
+
+```
+Regional(sqr+cubic, Block):
+  qoi = ~(0x12) = 0xFFFFFFED
+  qoiParams = ""      (sqr, cubic 均无参数)
+
+Regional(sqr, Interp):
+  qoi = ~(0x40000001) = 0xBFFFFFFE
+  qoiParams = ""
+```
+
+约束均为 `|mean(f(orig)) - mean(f(dec))| ≤ qEB`，f(x) 由 nibble 表达式定义。Block 路径有 budget tracking，Interp 路径返回 geb 兜底。
+
+### FX 模式
+
+```
+Regional(sin(x)+x², Block):
+  qoi = ~(0x30000000) = 0xCFFFFFFF
+  qoiParams = FX binary (f_str|df_str|ddf_str)
+```
+
+所有 Regional 编码统一走 `RegionalNibble`。eb 使用导数转换 `eb_f / |f'(x)|`，对任意 sub-QoI 通用。
+
+### qoi_encoder 调用
+
+```bash
+./qoi_encoder --regional "sqr+cubic"        → Regional(Block, nibble)
+./qoi_encoder --regional --interp "sqr"     → Regional(Interp, nibble)  
+./qoi_encoder --regional "sin(x)+x^2"       → Regional(Block, FX)
+```
 
 ---
 
@@ -280,4 +321,7 @@ Regional QoI 的 `qoiParams` 为空串（无额外参数）。约束由 `qEB` �
 | `0x0` | `(qoi>>28)&0xF == 0 && qoi >= 0` | 常规 nibble | base64(double[]) — 函数参数 |
 | `0x6` | `(qoi>>28)&0xF == 6` | Isoline | base64(double[]) — 函数参数 + [min,max,cnt,meb]×N |
 | `0x7` | `(qoi>>28)&0xF == 7` | FX | base64(binary) — 3 个 TinyExpr 字符串 |
-| `0xF` | `qoi < 0` | Regional | 空串（无参数） |
+| `0xF` | `qoi < 0, bit29-28=00` | Regional nibble (Block) | base64(double[]) — nibble 函数参数 |
+| `0xE` | `qoi < 0, bit29-28=00, bit30=1` | Regional nibble (Interp) | 同上 |
+| `0xC` | `qoi < 0, bit29-28=11, bit30=0` | Regional FX (Block) | FX binary |
+| `0x8` | `qoi < 0, bit29-28=11, bit30=1` | Regional FX (Interp) | FX binary |

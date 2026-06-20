@@ -54,11 +54,11 @@ std::string g_encoder_path;
 
 // Call external encoder binary via popen, parse "qoi = " / "qoiParams = " lines.
 bool call_encoder(const std::string &expr, int &qoi_out,
-                   std::string &params_out, std::string &error_out) {
-    // Shell-escape single quotes in the expression.
+                   std::string &params_out, std::string &error_out,
+                   const std::string &extra_flags) {
     std::string escaped;
     for (char c : expr) { if (c == '\'') escaped += "'\\''"; else escaped += c; }
-    std::string cmd = g_encoder_path + " '" + escaped + "' 2>&1";
+    std::string cmd = g_encoder_path + " " + extra_flags + " '" + escaped + "' 2>&1";
     FILE *f = popen(cmd.c_str(), "r");
     if (!f) { error_out = "popen failed"; return false; }
     char buf[4096]; std::string out;
@@ -88,12 +88,14 @@ static bool is_skip(const TestResult &r) {
 }
 
 int main(int argc, char **argv) {
-    bool basic=false, compose_only=false; bool isoline_only=false; int algo_mask=0;
+    bool basic=false, compose_only=false, isoline_only=false, regional_only=false;
+    int algo_mask=0;
     for (int i=1; i<argc; ++i) {
         if (!strcmp(argv[i],"--basic")) basic=true;
         else if (!strcmp(argv[i],"--full")) basic=false;
         else if (!strcmp(argv[i],"--compose")) compose_only=true;
         else if (!strcmp(argv[i],"--isoline")) isoline_only=true;
+        else if (!strcmp(argv[i],"--regional")) regional_only=true;
         else if (!strcmp(argv[i],"--interp-only")) algo_mask=(1<<TALGO_INTERP)|(1<<TALGO_INTERP_LORENZO);
         else if (!strcmp(argv[i],"--block-only")) algo_mask=1<<TALGO_BLOCK;
         else if (!strncmp(argv[i],"--encoder-path=",15)) g_encoder_path=argv[i]+15;
@@ -135,6 +137,62 @@ int main(int argc, char **argv) {
             }
         }
         if (isoline_only) {
+            int failed = total - passed - skipped;
+            printf("\n%d total, %d passed, %d failed, %d skipped\n", total, passed, failed, skipped);
+            return failed ? 1 : 0;
+        }
+    }
+
+    // ====== Regional tests (--regional flag, or included in --full) ======
+    if (regional_only || !basic) {
+        using namespace SZ3;
+        struct { const char *label, *expr; bool interp; double qEB; int qoi_expected; }
+        rt[] = {
+            {"RegLin",      "sqr",        false, 1.0,   ~(0x00000001)},
+            {"RegCubic",    "cubic",      false, 1.0,   ~(0x00000002)},
+            {"RegAbs",      "abs",        false, 1.0,   ~(0x00000008)},
+            {"RegSqrt",     "sqrt",       false, 0.1,   ~(0x00000003)},
+            {"RegSum",      "sqr+cubic",  false, 1.0,   ~(0x00000012)},
+            {"RegInterpLin","sqr",        true,  1.0,   ~(0x40000001)},
+            {"RegInterpCub","cubic",      true,  1.0,   ~(0x40000002)},
+        };
+        for (auto &tc : rt) {
+            if (g_encoder_path.empty()) { skipped += 2; continue; }
+            std::string flags = "--regional";
+            if (tc.interp) flags += " --interp";
+            int eq = 0; std::string ep; std::string err;
+            if (!call_encoder(tc.expr, eq, ep, err, flags))
+                { total+=2; skipped+=2; continue; }
+            size_t nx = dim_size(1, size_idx);
+            std::array<size_t,3> ds{nx, 32, 18};
+            for (int a : {TALGO_BLOCK, TALGO_INTERP}) {
+                if (tc.interp && a == TALGO_BLOCK) { total++; skipped++; continue; }
+                if (!tc.interp && a == TALGO_INTERP) { total++; skipped++; continue; }
+                Config conf(nx); conf.setDims(ds.begin(), ds.begin()+1);
+                conf.qoi = eq; conf.qoiParams = sz3_test::base64_decode_raw(ep);
+                conf.qEB = tc.qEB; conf.absErrorBound = 10.0;
+                conf.quantbinCnt = 65536; conf.qR = 32;
+                if (a == TALGO_BLOCK)
+                    { conf.cmprAlgo = SZ3::ALGO_LORENZO_REG; conf.lorenzo=true; conf.lorenzo2=false; conf.regression=false; }
+                else conf.cmprAlgo = SZ3::ALGO_INTERP;
+                auto data = generate_data(D1_RAMP, 1, nx, ds);
+                TestResult r;
+                size_t unused = 0;
+                double *dec = roundtrip_compress(conf, data.data(), nx, unused, r);
+                if (dec) {
+                    double agg = 0;
+                    for (size_t i = 0; i < nx; i++) agg += std::fabs(data[i] - dec[i]);
+                    agg /= nx;
+                    r.passed = (agg <= tc.qEB * (1.0 + 1e-8));
+                    if (!r.passed) r.fail_reason = "qoi-regional";
+                    r.max_qoi = agg;
+                    r.max_abs = max_abs_err(data.data(), dec, nx);
+                    delete[] dec;
+                }
+                run(tc.label, 1, D1_RAMP, a, SZ3::INTERP_ALGO_CUBIC, r);
+            }
+        }
+        if (regional_only) {
             int failed = total - passed - skipped;
             printf("\n%d total, %d passed, %d failed, %d skipped\n", total, passed, failed, skipped);
             return failed ? 1 : 0;

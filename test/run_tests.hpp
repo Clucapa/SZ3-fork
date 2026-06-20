@@ -66,7 +66,8 @@ static bool data_ok_for_qoi_domain(QoiDomain domain, const double *data, size_t 
 // Defined in e2e_main.cpp.
 extern std::string g_encoder_path;
 extern bool call_encoder(const std::string &expr, int &qoi_out,
-                          std::string &params_out, std::string &error_out);
+                          std::string &params_out, std::string &error_out,
+                          const std::string &extra_flags = "");
 
 // ============================================================================
 //  QOI matrix test — verify one QOI × pattern × algo combination.

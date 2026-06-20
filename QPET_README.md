@@ -78,9 +78,10 @@ class EBProvider {
 ```
 include/SZ3/qoi/
 ├── QoI.hpp                          QoIIf 基类（eval, create_eb_provider, is_pointwise）
-├── QoIIf.hpp                        工厂 GetQOI + nibble 解析器 + ParamReader
+├── QoIIf.hpp                        工厂 GetQOI + nibble 解析器 + ParamReader + Regional 新编码
 ├── QoI_IsolineNibble.hpp            Isoline 模式（mode 6，等值线约束叠加子 QoI）
 ├── QoI_FX.hpp                       FX 模式（mode 7，TinyExpr 任意函数）
+├── RegionalNibble.hpp               Regional 新编码（nibble/FX + Block/Interp 分派）
 ├── EBProvider.hpp                   EBProvider 抽象接口
 ├── PointwiseEBProvider.hpp          点态 eb 源
 ├── MultiQoIEBProvider.hpp           多 provider min 组合
@@ -169,13 +170,17 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel $(nproc)
 
 # 基础门禁（QOI 矩阵 + 剪枝，约 1s）
-./test/bin/e2e --basic
+./test/bin/e2e --basic --encoder-path=./test/bin/qoi_encoder
 
-# 全量（QOI矩阵 + 编码器往返 + Isoline ≈ 1916 条，约 2min）
+# 全量（QOI 矩阵 + 编码器往返 + Isoline + Regional ≈ 1874 条，约 2min）
 ./test/bin/e2e --full --encoder-path=./test/bin/qoi_encoder
+
+# 仅 Regional 新编码
+./test/bin/e2e --regional --encoder-path=./test/bin/qoi_encoder
 ```
 
-> 详细的 CLI 用法、CI 触发关键字、测试覆盖清单（19 QOI × 8 数据模式 × 5 算法、37 编码器表达式含 iso6/FX、Isoline 等）见 **[test_readme.md](test_readme.md)**。
+> 详细的 CLI 用法、CI 触发关键字、测试覆盖清单见 **[test_readme.md](test_readme.md)**。
+> QOI 编码格式、qoiParams、Regional/FX/Isoline 详解见 **[qoi_readme.md](qoi_readme.md)**。
 
 ## API 调用
 
