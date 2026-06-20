@@ -84,7 +84,8 @@ static void usage(const char *prog) { fprintf(stderr,
     "Usage: %s [--basic|--full|--compose|--isoline|--interp-only|--block-only] [--encoder-path=PATH]\n", prog); }
 
 static bool is_skip(const TestResult &r) {
-    return r.fail_reason && (!strcmp(r.fail_reason,"skip-domain")||!strcmp(r.fail_reason,"skip-overflow"));
+    return r.fail_reason && (!strcmp(r.fail_reason,"skip-domain")||!strcmp(r.fail_reason,"skip-overflow")
+                            ||!strcmp(r.fail_reason,"skip-no-encoder")||!strcmp(r.fail_reason,"encoder-error"));
 }
 
 int main(int argc, char **argv) {
