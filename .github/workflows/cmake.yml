@@ -103,7 +103,7 @@ jobs:
       - name: Run e2e tests (full)
         if: needs.parse-commit.outputs.run_full == 'true'
         run: |
-          ./test/bin/e2e --full
+          ./test/bin/e2e --full --encoder-path=./test/bin/qoi_encoder
           if [ $? -ne 0 ]; then
             echo "::error::Full end-to-end tests failed"
             exit 1

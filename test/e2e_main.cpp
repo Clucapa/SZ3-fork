@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
             {"RegInterpCub","cubic",      true,  1.0,   ~(0x40000002)},
         };
         for (auto &tc : rt) {
-            if (g_encoder_path.empty()) { skipped += 2; continue; }
+            if (g_encoder_path.empty()) { total += 2; skipped += 2; continue; }
             std::string flags = "--regional";
             if (tc.interp) flags += " --interp";
             int eq = 0; std::string ep; std::string err;
