@@ -132,7 +132,7 @@ struct TestCase {
 int main() {
     const size_t N = 10000;
     auto data = gen_data(N);
-    printf("=== QOI API 校验测试 ===\n\n");
+    printf("=== QOI API TEST ===\n\n");
     int total = 0, passed = 0;
 
     auto run = [&](const TestCase &tc) {
