@@ -3,7 +3,7 @@
 // Usage:
 //   #include "encode.hpp"
 //   auto r = qoi_encode::encode("sqr+abs+cubic");
-//   if (r.ok) { printf("qoi=0x%X params=%s\n", r.qoi, r.qoiParams.c_str()); }
+//   if (r.ok) { printf("qoi=0x%08X params=%s\n", (uint32_t)r.qoi, r.qoiParams.c_str()); }
 #ifndef QOI_ENCODER_ENCODE_HPP
 #define QOI_ENCODER_ENCODE_HPP
 

@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     if (expr_str.size() > 5 && expr_str.substr(0, 5) == "conv(" && expr_str.back() == ')') {
         auto r = qoi_encode::conv_encode(expr_str);
         if (!r.ok) { fprintf(stderr, "Conv Error: %s\n", r.error.c_str()); return 1; }
-        printf("qoi        = 0x%X\n", r.qoi);
+        printf("qoi        = 0x%08X\n", (uint32_t)r.qoi);
         printf("qoiParams  = \"%s\"\n", r.qoiParams.c_str());
         return 0;
     }
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
         }
         auto r = qoi_encode::iso6_encode(expr_str);
         if (!r.ok) { fprintf(stderr, "Iso6 Error: %s\n", r.error.c_str()); return 1; }
-        printf("qoi        = 0x%X\n", r.qoi);
+        printf("qoi        = 0x%08X\n", (uint32_t)r.qoi);
         printf("qoiParams  = \"%s\"\n", r.qoiParams.c_str());
         return 0;
     }
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
         if (!r.ok) { fprintf(stderr, "Error: %s\n", r.error.c_str()); return 1; }
     }
 
-    printf("qoi        = 0x%X\n", r.qoi);
+    printf("qoi        = 0x%08X\n", (uint32_t)r.qoi);
     printf("qoiParams  = \"%s\"\n", r.qoiParams.c_str());
     return 0;
 }

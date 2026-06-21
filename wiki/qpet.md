@@ -105,7 +105,7 @@ test/                                测试套件（e2e + isoline_tests + encode
 
 `conf.qoiParams` 内部存储为原始二进制（`vector<uchar>`），base64 仅为 CLI 和 INI 的传输格式。
 
-> 完整格式、参数、示例见 **[qoi_readme.md](qoi_readme.md)**。
+> 完整格式、参数、示例见 **[qoi.md](qoi.md)**。
 
 ## Encoder CLI
 
@@ -145,7 +145,7 @@ cmake --build build --parallel $(nproc)
 ./test/bin/e2e --conv --encoder-path=./test/bin/qoi_encoder
 ```
 
-> 详细 CLI、测试覆盖清单见 **[test_readme.md](test_readme.md)**。编码格式见 **[qoi_readme.md](qoi_readme.md)**。
+> 详细 CLI、测试覆盖清单见 **[test.md](test.md)**。编码格式见 **[qoi.md](qoi.md)**。
 
 ## API 调用
 
@@ -177,3 +177,4 @@ conf.quantbinCnt = 65536;
 size_t cmpSize = SZ_compress(conf, data, outBuf, outCap);
 double *dec = SZ_decompress(conf2, outBuf, cmpSize);
 ```
+

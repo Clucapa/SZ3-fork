@@ -1,88 +1,148 @@
-SZ3: A Modular Error-bounded Lossy Compression Framework for Scientific Datasets
-=====
+# SZ3 — Error-bounded Lossy Compression with QOI
 
-This is a fork of the SZ3 repository, created to implement a standalone, modular QPET plugin on top of the latest SZ3 version.
+本仓库在 [SZ3 v3.3.2](https://github.com/szcompressor/SZ3) 基础上维护 **QOI（Quantity of Interest）约束压缩** 插件。支持逐点函数约束、等值线约束、区域聚合约束、滑动窗口卷积约束。
 
-(C) 2016 by Mathematics and Computer Science (MCS), Argonne National Laboratory. See copyright-and-BSD-license.txt in the top-level directory.
+更多文档见 `wiki/`：
 
-* Major Authors: Sheng Di, Kai Zhao, Xin Liang, Jinyang Liu
-* Supervisor: Franck Cappello
-* Other Contributors: Robert Underwood, Sihuan Li, Ali M. Gok
+- [wiki/sz3.md](wiki/sz3.md) — SZ3 原始 README
+- [wiki/qpet.md](wiki/qpet.md) — QPET 插件实现与接口说明
+- [wiki/qoi.md](wiki/qoi.md) — QOI 编码格式与 encoder 语法
+- [wiki/test.md](wiki/test.md) — 测试清单与 CI
 
-## Installation
+---
 
-* mkdir build && cd build
-* cmake -DCMAKE_INSTALL_PREFIX:PATH=[INSTALL_DIR] ..
-* make
-* make install
+## 编译
 
-Then, you'll find all the executables in [INSTALL_DIR]/bin and header files in [INSTALL_DIR]/include
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel $(nproc)
+```
 
+依赖：CMake ≥ 3.14、C++17、zstd。encoder 编译可选 SymEngine 支持（安装后 cmake 自动启用）。
 
-## How to run
+---
 
-#### SZ3 Executable
-* You can use the executable 'tools/sz3/sz3' to do the compression/decompression.
+## 快速使用
 
-#### SZ3 C++ API
-* Located in 'include/SZ3/api/sz.hpp'. 
-* Requiring a modern C++ compiler.  
-* Different with SZ2 API.
+### 1. Encoder CLI — 将 QOI 表达式编码为 (qoi, qoiParams)
 
-#### SZ3 C API
-* Located in 'tools/sz3c/include/sz3c.h'
-* Compatible with SZ2 API
+```bash
+# 点态 nibble
+./test/bin/qoi_encoder "sqr+abs"
+# 输出: qoi = 0x00000081  qoiParams = (空)
 
-#### SZ3 Python API
-* available via `pip install pysz`
-* [Source code in 'tools/pysz'](https://github.com/szcompressor/SZ3/tree/master/tools/pysz)
+# 卷积约束
+./test/bin/qoi_encoder "conv(1,-2,1,0.5)"
+# 输出: qoi = 0x8EFFFFFC  qoiParams = AAAAAAAA8D8AAAAAAAAAwAAAAAAAAPA/LUMc6+I2Gj8=
 
-#### H5Z-SZ3
-* Located in 'tools/H5Z-SZ3'
-* Please add "-DBUILD_H5Z_FILTER=ON" to enable this function for CMake.
-* sz3ToHDF5 and HDF5ToSz3 are provided for testing.
+# 区域聚合
+./test/bin/qoi_encoder --regional "sqr+cubic"
+# 输出: qoi = 0xFFFFFFDE  qoiParams = (空)
 
-#### ParaView SZ3 Reader
-* Located in 'tools/paraview'
-* Please add "-DBUILD_PARAVIEW_PLUGIN=ON" to enable this function for CMake.
-* Developed using SZ3 C++ API.
-* More instructions can be viewed [here](tools/paraview/README.md).
+# 等值线（Isoline）
+./test/bin/qoi_encoder "iso6(sqr, -5, 5, 3, 0.01)"
+```
 
+### 2. C++ API — 函数调用压缩
 
-#### Third-Party APIs
+```cpp
+#include "SZ3/api/SZ3.hpp"
 
-* [SZ3 Fortran API](https://github.com/ofmla/sz3_simple_example) (by [Oscar Mojica](https://github.com/ofmla))
-* [SZ3 Rust API](https://github.com/apertus-open-source-cinema/sz3-rs) (by [Juniper Tyree](https://github.com/juntyr) and [Robin Heinemann](https://github.com/rroohhh))
-* [SZ3 Numcodecs API](https://github.com/juntyr/numcodecs-rs/blob/main/codecs/sz3/) (by [Juniper Tyree](https://github.com/juntyr))
+SZ3::Config conf;
+conf.setDims({1000});               // 1D, 1000 点
+conf.cmprAlgo = SZ3::ALGO_LORENZO_REG;
+conf.qoi  = 0x12;                   // nibble模式, 低28bit=nibbles[2,1]=sqr+cubic → SumQoI
+conf.qEB = 0.01;                    // 约束误差界
 
+// 区域聚合：约束 avg(f) 偏差 ≤ qEB
+// ./test/bin/qoi_encoder --regional "sqr+cubic"
+// conf.qoi = 0xFFFFFFDE;           // ~raw=0x21, bit29-28=00→Regional nibble, 子编码=SumQoI(sqr+cubic)
 
-## Citations
-[//]: # (**Kindly note**: If you mention SZ3 in your paper, the most appropriate citation is to include these three references &#40;**TBD22, ICDE21, Bigdata18**&#41; because they cover the design and implementation of the latest version of SZ.)
-* QOZv2 (the enhanced interpolation-based algorithm): [High-performance Effective Scientific Error-bounded Lossy Compression with Auto-tuned Multi-component Interpolation](https://dl.acm.org/doi/10.1145/3639259).
-* SZ3's interpolation-based algorithm: [Optimizing Error-Bounded Lossy Compression for Scientiﬁc Data by Dynamic Spline Interpolation](https://ieeexplore.ieee.org/document/9458791).
-* The software engineering design of SZ3: [SZ3: A modular framework for composing prediction-based error-bounded lossy compressors](https://ieeexplore.ieee.org/abstract/document/9866018).
+// 等值线：约束 f(x) 不跨越等值线
+// ./test/bin/qoi_encoder "iso6(sqr, -5, 5, 3, 0.01)"
+// conf.qoi = 0x60000001;           // 高4bit=0x6→Isoline, 子nibble[1]=sqr
+// conf.qoiParams = base64_decode("AAAAAAAAFMAAAAAAAAAUQAAAAAAAAAhAexSuR+F6hD8=");  // double[4]: [min=-5, max=5, count=3, meb=0.01]
 
+// 卷积：约束滑动窗口卷积偏差 ≤ tol
+// ./test/bin/qoi_encoder "conv(1,-2,1,0.0001)"
+// conf.qoi = 0x8EFFFFFC;           // ~raw=0x71000003, 高nibble=0x7→Conv, d=1(1D), w=3
+// conf.qoiParams = base64_decode("AAAAAAAA8D8AAAAAAAAAwAAAAAAAAPA/LUMc6+I2Gj8=");  // double[4]: [k0=1, k1=-2, k2=1, tol=0.0001]
 
-## Version history
+size_t cmpSize = SZ_compress(conf, inputData, compressedBuf, bufCapacity);
+double *dec = SZ_decompress(conf, compressedBuf, cmpSize);
+```
 
-Version New features
+上述 demo 的运行及校验见 [wiki/test_api.cpp](wiki/test_api.cpp)，编译运行：
+```bash
+g++ -std=c++17 -O2 -Iinclude -Ibuild/include -DSZ3_USE_SKA_HASH=1 -fopenmp \
+    wiki/test_api.cpp -o /tmp/test_api \
+    -Ltest/lib -lzstd -lgomp -ltinyexpr -fopenmp -lpthread
+LD_LIBRARY_PATH=test/lib /tmp/test_api
+```
 
-* SZ 3.0.0 SZ3 is the C++ version of SZ with a modular and composable design.
-* SZ 3.0.1 Improve the build process.
-* SZ 3.1.0 The default algorithm is now interpolation+Lorenzo.
-* SZ 3.1.1 Add OpenMP support. Works for all algorithms. Please enable it using the config file. 
-* SZ 3.1.2 Support configuration file (INI format). An example can be found in 'tools/sz3/sz3.config'.
-* SZ 3.1.3 Support more error control mode: PSNR, L2Norm, ABS_AND_REL, ABS_OR_REL. Support INT32 and INT64 datatype.
-* SZ 3.1.4 Support running on Windows natively with Visual Studio. Please use CMake to generate Visual Studio solution files.
-* SZ 3.1.5 Support HDF5 by H5Z-SZ3. Please add "-DBUILD_H5Z_FILTER=ON" to enable this function for CMake.
-* SZ 3.1.6 Support C API and Python API.
-* SZ 3.1.7 Initial MDZ(https://github.com/szcompressor/SZ3/tree/master/tools/mdz) support.
-* SZ 3.1.8 namespace changed from SZ to SZ3. H5Z-SZ3 supports configuration files now.
-* SZ 3.2.0 API reconstructed for FZ. H5Z-SZ3 rewrite. Compression version checking.
-* SZ 3.3.0 Add key QoZ v1 and v2 features to improve compression speed and data quality. The full QoZ is available from **a separate branch** (https://github.com/szcompressor/SZ3/tree/QoZ). 
-* SZ 3.3.1: SZ3 Windows support for both Visual Studio and MinGW toolchains. pySZ v1 released and available via `pip install pysz`. Bio algorithms added.
-* SZ 3.3.2: bugfix for compressed format.
+### 3. SZ3 命令行压缩 — 通过 config 文件
 
-## 3rd party libraries/tools
-* [Zstandard](https://facebook.github.io/zstd/) v1.4.5 will be fetched if libzstd can not be found by pkg-config.
-* The source code of ska_hash is included in SZ3.
+sz3 CLI 不支持 `-qoi` 等 flag，qoi 参数通过 `-c <config.ini>` 传入（`[QoISettings]` 段）。
+
+```bash
+# nibble（SumQoI: sqr + cubic, qEB=0.01）
+./test/bin/qoi_encoder "sqr+cubic"
+# → qoi = 0x00000012  qoiParams = ""
+cat > /tmp/my.ini << 'EOF'
+[QoISettings]
+qoi = 0x00000012
+qoiEB = 0.01
+qoiQuantbinCnt = 65536
+EOF
+./test/bin/sz3 -f -i input.bin -z output.sz3 -1 10000 -c /tmp/my.ini
+
+# regional
+./test/bin/qoi_encoder --regional "sqr+cubic"
+# → qoi = 0xFFFFFFDE  qoiParams = ""
+cat > /tmp/my.ini << 'EOF'
+[QoISettings]
+qoi = 0xFFFFFFDE
+qoiEB = 0.02
+qoiQuantbinCnt = 65536
+EOF
+./test/bin/sz3 -f -i input.bin -z output.sz3 -1 10000 -c /tmp/my.ini
+
+# isoline
+./test/bin/qoi_encoder "iso6(sqr, -5, 5, 3, 0.01)"
+# → qoi = 0x60000001  qoiParams = AAAAAAAAFMAAAAAAAAAUQAAAAAAAAAhAexSuR+F6hD8=
+cat > /tmp/my.ini << 'EOF'
+[QoISettings]
+qoi = 0x60000001
+qoiEB = 1.0
+qoiParams = AAAAAAAAFMAAAAAAAAAUQAAAAAAAAAhAexSuR+F6hD8=
+qoiQuantbinCnt = 65536
+EOF
+./test/bin/sz3 -f -i input.bin -z output.sz3 -1 10000 -c /tmp/my.ini
+
+# 卷积
+./test/bin/qoi_encoder "conv(1,-2,1,0.0001)"
+# → qoi = 0x8EFFFFFC  qoiParams = AAAAAAAA8D8AAAAAAAAAwAAAAAAAAPA/LUMc6+I2Gj8=
+cat > /tmp/my.ini << 'EOF'
+[QoISettings]
+qoi = 0x8EFFFFFC
+qoiEB = 1.0
+qoiParams = AAAAAAAA8D8AAAAAAAAAwAAAAAAAAPA/LUMc6+I2Gj8=
+qoiQuantbinCnt = 65536
+EOF
+./test/bin/sz3 -f -i input.bin -z output.sz3 -1 10000 -c /tmp/my.ini
+```
+
+上述 demo 的运行及校验见 [wiki/test_cli.sh](wiki/test_cli.sh)，运行：
+```bash
+bash wiki/test_cli.sh
+```
+
+---
+
+## 测试
+
+```bash
+./test/bin/e2e --full --encoder-path=./test/bin/qoi_encoder
+```
+
+详细测试清单见 [wiki/test.md](wiki/test.md)。

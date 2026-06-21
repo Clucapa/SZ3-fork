@@ -21,7 +21,7 @@ cmake --build build --parallel $(nproc)
 ./test/bin/e2e --full --encoder-path=./test/bin/qoi_encoder
 
 # 分项测试
-./test/bin/e2e --compose --encoder-path=./test/bin/qoi_encoder      # 编码器往返
+./test/bin/e2e --compose --encoder-path=./test/bin/qoi_encoder      # 编码器
 ./test/bin/e2e --isoline --encoder-path=./test/bin/qoi_encoder      # Isoline
 ./test/bin/e2e --regional --encoder-path=./test/bin/qoi_encoder     # Regional
 ./test/bin/e2e --conv --encoder-path=./test/bin/qoi_encoder         # Convolution
@@ -29,9 +29,6 @@ cmake --build build --parallel $(nproc)
 # 算法筛选
 ./test/bin/e2e --block-only --encoder-path=./test/bin/qoi_encoder
 ./test/bin/e2e --interp-only --encoder-path=./test/bin/qoi_encoder
-
-# 调试
-./test/bin/e2e --debug --regional --encoder-path=./test/bin/qoi_encoder
 ```
 
 ## CI 触发
@@ -90,7 +87,7 @@ cmake --build build --parallel $(nproc)
 
 ---
 
-### 二、编码器往返测试（24 表达式 × 2 模式 × 2 算法）
+### 二、编码器测试（24 表达式 × 2 模式 × 2 算法）
 
 通过外部 encoder 编码为 `(qoi, qoiParams)`，feed 给压缩器后验证 QoI 合规。
 
@@ -160,7 +157,7 @@ cmake --build build --parallel $(nproc)
 
 ---
 
-### 四、Regional 新编码测试（11 表达式 × 2 算法）
+### 四、Regional 编码测试（11 表达式 × 2 算法）
 
 通过 encoder `--regional` 编码，硬编码 feval 验证聚合约束。Block 和 Interp 算法均测试。
 
